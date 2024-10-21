@@ -22,6 +22,8 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from PIL import Image
 from pymongo import MongoClient
+from fuzzywuzzy import fuzz
+from fuzzywuzzy import process
 from bson import ObjectId
 import requests
 import imghdr
@@ -105,30 +107,6 @@ def send_push_notification(token, content):
         response = messaging.send(message)
     except Exception as e:
         print('Error sending message:', e)
-        
-@app.route("/test-notification", methods=["POST"])
-def test_notification():
-    data = request.get_json()
-    token = data.get("token")
-
-    if not token:
-        return jsonify({"error": "FCM token is required"}), 400
-
-    # Create a simple push notification
-    message = messaging.Message(
-        notification=messaging.Notification(
-            title="Test Notification",
-            body="This is a test push notification."
-        ),
-        token=token
-    )
-
-    try:
-        # Send the message
-        response = messaging.send(message)
-        return jsonify({"success": True, "response": response}), 200
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
         
 @app.route('/firebase-messaging-sw.js')
 def serve_sw():
@@ -457,12 +435,6 @@ def settings():
     
     user_data = users_collection.find_one({"username": current_user.username})
     return render_template("settings.html", user_data=user_data)
-
-@app.route("/friends")
-@login_required
-def friends():
-    """Redirect to home page since friends page is now merged"""
-    return redirect(url_for("home"))
     
 def handle_friend_request(username, friend_username):
     friend_data = users_collection.find_one({"username": friend_username})
@@ -525,6 +497,69 @@ def add_friend():
     
     flash(f"Friend request sent to {friend_username}!")
     return redirect(url_for("home"))
+
+@app.route('/search_users', methods=["GET"])
+@login_required
+def search_users():
+    query = request.args.get("q", "").lower().strip()
+    if not query:
+        return jsonify([])
+
+    # Get current user's data for exclusion list
+    current_user_data = users_collection.find_one({"username": current_user.username})
+    friends_list = current_user_data.get("friends", [])
+
+    # First, get all eligible users (excluding current user and friends)
+    all_users = list(users_collection.find(
+        {
+            "username": {"$ne": current_user.username},
+            "username": {"$nin": friends_list}
+        },
+        {"username": 1}  # We don't need to fetch profile_photo field since we're using the route
+    ))
+
+    # If it's just one character, only match first letter
+    if len(query) == 1:
+        matching_users = [
+            user for user in all_users 
+            if user["username"].lower().startswith(query)
+        ]
+    else:
+        # For longer queries, use fuzzy matching
+        username_matches = [
+            (user, fuzz.ratio(query, user["username"].lower()))
+            for user in all_users
+        ]
+
+        # Filter based on different criteria depending on query length
+        if len(query) <= 3:
+            matching_users = [
+                user for user, score in username_matches
+                if score > 50 or user["username"].lower().startswith(query)
+            ]
+        else:
+            matching_users = [
+                user for user, score in username_matches
+                if score > 70
+            ]
+
+        # Sort by similarity score
+        matching_users.sort(
+            key=lambda x: fuzz.ratio(query, x["username"].lower()),
+            reverse=True
+        )
+
+    # Limit results
+    matching_users = matching_users[:5]
+
+    # Format response using the profile_photo route
+    suggestions = [{
+        "username": user["username"],
+        "profile_photo_url": url_for('profile_photo', username=user["username"], _external=True),
+        "similarity": fuzz.ratio(query, user["username"].lower())
+    } for user in matching_users]
+
+    return jsonify(suggestions)
 
 @app.route("/accept_friend/<username>")
 @login_required
@@ -1041,7 +1076,7 @@ def update_room_name(room_code):
         flash("Room name cannot be empty.")
         return redirect(url_for("room", code=room_code))
     
-    room_data = rooms_collection.find_one({"_id": room_code})
+    room_data = rooms_collection.find_one({f"_id": room_code})
     
     if not room_data:
         flash("Room does not exist.")

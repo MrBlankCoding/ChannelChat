@@ -11,3 +11,5 @@ python-dotenv
 flask-cors
 flask_login
 apscheduler
+python-Levenshtein
+fuzzywuzzy
