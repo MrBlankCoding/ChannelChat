@@ -1,6 +1,4 @@
 # Standard library imports
-import eventlet
-eventlet.monkey_patch()
 import os
 import json
 import random
@@ -1395,7 +1393,7 @@ def shutdown_scheduler(exception=None):
     if scheduler.running:
         scheduler.shutdown()
 
-if __name__ == "__main__":
+def setup_application():
     # Create upload folders if they don't exist
     for folder in [app.config['UPLOAD_FOLDER'], app.config['PROFILE_UPLOAD_FOLDER']]:
         if not os.path.exists(folder):
@@ -1403,7 +1401,6 @@ if __name__ == "__main__":
 
     # Create indexes only if they don't exist
     existing_indexes = users_collection.index_information()
-
     if "username_1" not in existing_indexes:
         users_collection.create_index([("username", 1)], unique=True)
     
@@ -1412,8 +1409,10 @@ if __name__ == "__main__":
     
     if "messages.id_1" not in rooms_collection.index_information():
         rooms_collection.create_index([("messages.id", 1)])
-    
-    port = int(os.environ.get("PORT", 5001))
+
+if __name__ == "__main__":
+    setup_application()  # Call the setup function for direct runs
+    port = int(os.environ.get("PORT", 5002))
     socketio.run(app, host='0.0.0.0', port=port)
 
 #gunicorn --worker-class eventlet -w 9 --timeout 30 --bind 127.0.0.1:8000 main:app
