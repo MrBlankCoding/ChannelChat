@@ -13,7 +13,7 @@ from functools import wraps
 from flask import Flask, render_template, request, session, redirect, url_for, send_from_directory, flash, jsonify
 from flask_socketio import join_room, leave_room, send, SocketIO
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from firebase_admin import credentials, messaging, initialize_app
+from firebase_admin import credentials, messaging, initialize_app, storage
 import firebase_admin
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -50,6 +50,7 @@ app.config['ALLOWED_IMAGE_TYPES'] = {'png', 'jpeg', 'jpg', 'gif'}
 app.config['PROFILE_UPLOAD_FOLDER'] = 'profile_photos'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit
+storage_url = os.getenv("FIREBASE_STORAGE_URL")
 
 # Initialize MongoDB client using the URI from .env
 client = MongoClient(os.getenv("MONGO_URI"))
@@ -130,7 +131,7 @@ def register_fcm_token():
     return jsonify({"error": "Invalid data"}), 400
 
 def save_profile_photo(file, username):
-    """Helper function to save and process profile photos"""
+    """Helper function to save and process profile photos in Firebase Cloud Storage"""
     if not file:
         return None
         
@@ -149,19 +150,25 @@ def save_profile_photo(file, username):
         # Resize image to a reasonable size (e.g., 200x200)
         image.thumbnail((200, 200))
         
-        # Generate filename and save path
+        # Save image to a BytesIO object
+        img_io = io.BytesIO()
+        image.save(img_io, format=file_type.upper())
+        img_io.seek(0)  # Seek to the beginning of the stream
+        
+        # Upload image to Firebase Cloud Storage
+        bucket = storage.bucket()
         filename = f"profile_{username}.{file_type}"
-        filepath = os.path.join(app.config['PROFILE_UPLOAD_FOLDER'], filename)
+        blob = bucket.blob(filename)
+        blob.upload_from_file(img_io, content_type=f"image/{file_type}")
         
-        # Save processed image
-        image.save(filepath)
+        # Make the image publicly accessible
+        blob.make_public()
         
-        return filename
+        return blob.public_url
     except Exception as e:
         flash("Error processing profile photo")
         return None
     
-        
 # Set up the background scheduler
 def check_inactive_users():
     threshold = datetime.utcnow() - timedelta(minutes=5)
@@ -208,15 +215,15 @@ def stop_heartbeat():
     )
     return "", 204
 
-    
 @app.route('/profile_photos/<username>')
 def profile_photo(username):
-    # Check if the user has uploaded a profile photo by looking for files matching their username
+    """Serve the user's profile photo from Firebase Cloud Storage"""
     for ext in app.config['ALLOWED_IMAGE_TYPES']:
         filename = f"profile_{username}.{ext}"
-        filepath = os.path.join(app.config['PROFILE_UPLOAD_FOLDER'], filename)
-        if os.path.exists(filepath):
-            return send_from_directory(app.config['PROFILE_UPLOAD_FOLDER'], filename)
+        blob = storage.bucket().blob(filename)
+        if blob.exists():
+            # Use the public URL directly from the blob
+            return redirect(blob.public_url)
     
     # If no profile photo is found, return the default profile image
     return redirect(url_for('default_profile'))
@@ -225,7 +232,6 @@ def profile_photo(username):
 def default_profile():
     # Serve the default profile image if no custom image exists
     return send_from_directory('static/images', 'default-profile.png')
-
 
 def generate_unique_code(length):
     while True:
@@ -1411,5 +1417,5 @@ if __name__ == "__main__":
     if "messages.id_1" not in rooms_collection.index_information():
         rooms_collection.create_index([("messages.id", 1)])
     
-    port = int(os.environ.get("PORT", 5001))
+    port = int(os.environ.get("PORT", 5002))
     socketio.run(app, debug=True, allow_unsafe_werkzeug=True, host='0.0.0.0', port=port)
