@@ -460,12 +460,24 @@ socketio.on("chat_history", (data) => {
     );
     messageContainer.appendChild(messageElement);
 
-    if (message.name !== currentUser && !message.read_by.includes(currentUser)) {
+    // Fix: Check if read_by is an array and contains valid readers
+    const validReaders = Array.isArray(message.read_by) ? 
+      message.read_by.filter(reader => reader !== null) : [];
+
+    if (message.name !== currentUser && !validReaders.includes(currentUser)) {
       unreadMessages.add(message.id);
     }
 
-    if (message.name === currentUser && message.read_by.some(reader => reader !== currentUser)) {
-      messageElement.querySelector('.message-content').parentElement.style.backgroundColor = '#4E46DC';
+    // Fix: Only mark as read (purple) if there are actual readers besides the sender
+    if (message.name === currentUser) {
+      const hasBeenRead = validReaders.some(reader => 
+        reader !== null && 
+        reader !== currentUser
+      );
+      
+      if (hasBeenRead) {
+        messageElement.querySelector('.message-content').parentElement.style.backgroundColor = '#4E46DC';
+      }
     }
   });
   
@@ -481,7 +493,6 @@ socketio.on("chat_history", (data) => {
   
   markMessagesAsRead();
   
-  // Set the scroll position to the bottom immediately after rendering messages
   messages.scrollTop = messages.scrollHeight;
 });
 
@@ -489,7 +500,6 @@ socketio.on("more_messages", (data) => {
   const oldScrollHeight = messages.scrollHeight;
   let messageContainer = messages.querySelector('.flex.flex-col');
   
-  // If the message container doesn't exist, create it
   if (!messageContainer) {
     messageContainer = document.createElement('div');
     messageContainer.className = 'flex flex-col space-y-4 p-4';
@@ -497,8 +507,6 @@ socketio.on("more_messages", (data) => {
   }
   
   const loadMoreBtn = document.getElementById('load-more-btn');
-  
-  // Create a document fragment to hold the new messages
   const fragment = document.createDocumentFragment();
   
   data.messages.forEach((message) => {
@@ -511,16 +519,27 @@ socketio.on("more_messages", (data) => {
     );
     fragment.appendChild(messageElement);
 
-    if (message.name !== currentUser && !message.read_by.includes(currentUser)) {
+    // Fix: Check if read_by is an array and contains valid readers
+    const validReaders = Array.isArray(message.read_by) ? 
+      message.read_by.filter(reader => reader !== null) : [];
+
+    if (message.name !== currentUser && !validReaders.includes(currentUser)) {
       unreadMessages.add(message.id);
     }
 
-    if (message.name === currentUser && message.read_by.some(reader => reader !== currentUser)) {
-      messageElement.querySelector('.message-content').parentElement.style.backgroundColor = '#4E46DC';
+    // Fix: Only mark as read (purple) if there are actual readers besides the sender
+    if (message.name === currentUser) {
+      const hasBeenRead = validReaders.some(reader => 
+        reader !== null && 
+        reader !== currentUser
+      );
+      
+      if (hasBeenRead) {
+        messageElement.querySelector('.message-content').parentElement.style.backgroundColor = '#4E46DC';
+      }
     }
   });
   
-  // Insert the new messages
   if (loadMoreBtn) {
     loadMoreBtn.after(fragment);
   } else {
@@ -536,7 +555,6 @@ socketio.on("more_messages", (data) => {
   
   isLoadingMessages = false;
   
-  // Adjust scroll position to maintain the user's current view
   const newScrollHeight = messages.scrollHeight;
   messages.scrollTop = newScrollHeight - oldScrollHeight + messages.scrollTop;
 });
