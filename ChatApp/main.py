@@ -5,25 +5,40 @@ import random
 import re
 import base64
 import io
-from datetime import timedelta, datetime
+from datetime import datetime, timedelta
 from string import ascii_uppercase
 from functools import wraps
 
 # Third-party library imports
-from flask import Flask, render_template, request, session, redirect, url_for, send_from_directory, flash, jsonify
-from flask_socketio import join_room, leave_room, send, SocketIO
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from flask import (
+    Flask,
+    render_template,
+    request,
+    session,
+    redirect,
+    url_for,
+    send_from_directory,
+    flash,
+    jsonify,
+)
+from flask_socketio import SocketIO, join_room, leave_room, send
+from flask_login import (
+    LoginManager,
+    UserMixin,
+    login_user,
+    login_required,
+    logout_user,
+    current_user,
+)
 from firebase_admin import credentials, messaging, initialize_app
 import firebase_admin
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
-from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from PIL import Image
 from pymongo import MongoClient
-from fuzzywuzzy import fuzz
-from fuzzywuzzy import process
+from fuzzywuzzy import fuzz, process
 from bson import ObjectId
 import requests
 import imghdr
@@ -1404,11 +1419,15 @@ def setup_application():
     if "username_1" not in existing_indexes:
         users_collection.create_index([("username", 1)], unique=True)
     
-    if "users_1" not in rooms_collection.index_information():
+    existing_rooms_indexes = rooms_collection.index_information()
+    if "users_1" not in existing_rooms_indexes:
         rooms_collection.create_index([("users", 1)])
     
-    if "messages.id_1" not in rooms_collection.index_information():
+    if "messages.id_1" not in existing_rooms_indexes:
         rooms_collection.create_index([("messages.id", 1)])
+
+# Wrap the app for ASGI compatibility
+app_asgi = WSGIApp(socketio)
 
 if __name__ == "__main__":
     setup_application()  # Call the setup function for direct runs
