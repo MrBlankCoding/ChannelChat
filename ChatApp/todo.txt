@@ -5,14 +5,11 @@
 51. Make it so you can send images on mobile
 52. Add support for videos
 53. Make images scale
-54. Make edit message edit the message and not create a new messages
-55. Make the accept room invite its own tab
 56. Add a notifcation sound
 57. Make it so it doesnt duplicate notifcations due to mutiple members in a room
-58. Add loading indicator
-59. Improve dashboard UI
-60. Make space smaller between your messages
 61. sound effect for reactions, replys, images
 62. themed chats
 63. audio messages
 64. Fix read
+65. Delete account button
+66. UI for edited messages

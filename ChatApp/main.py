@@ -515,7 +515,7 @@ def search_users():
             "username": {"$ne": current_user.username},
             "username": {"$nin": friends_list}
         },
-        {"username": 1}  # We don't need to fetch profile_photo field since we're using the route
+        {"username": 1}
     ))
 
     # If it's just one character, only match first letter
