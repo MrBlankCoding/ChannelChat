@@ -13,5 +13,4 @@ flask_login
 apscheduler
 python-Levenshtein
 fuzzywuzzy
-gunicorn
-eventlet
+uvicorn
