@@ -5,40 +5,25 @@ import random
 import re
 import base64
 import io
-from datetime import datetime, timedelta
+from datetime import timedelta, datetime
 from string import ascii_uppercase
 from functools import wraps
 
 # Third-party library imports
-from flask import (
-    Flask,
-    render_template,
-    request,
-    session,
-    redirect,
-    url_for,
-    send_from_directory,
-    flash,
-    jsonify,
-)
-from flask_socketio import SocketIO, join_room, leave_room, send
-from flask_login import (
-    LoginManager,
-    UserMixin,
-    login_user,
-    login_required,
-    logout_user,
-    current_user,
-)
+from flask import Flask, render_template, request, session, redirect, url_for, send_from_directory, flash, jsonify
+from flask_socketio import join_room, leave_room, send, SocketIO
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from firebase_admin import credentials, messaging, initialize_app
 import firebase_admin
 from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from PIL import Image
 from pymongo import MongoClient
-from fuzzywuzzy import fuzz, process
+from fuzzywuzzy import fuzz
+from fuzzywuzzy import process
 from bson import ObjectId
 import requests
 import imghdr
@@ -530,7 +515,7 @@ def search_users():
             "username": {"$ne": current_user.username},
             "username": {"$nin": friends_list}
         },
-        {"username": 1}
+        {"username": 1}  # We don't need to fetch profile_photo field since we're using the route
     ))
 
     # If it's just one character, only match first letter
@@ -1408,7 +1393,7 @@ def shutdown_scheduler(exception=None):
     if scheduler.running:
         scheduler.shutdown()
 
-def setup_application():
+if __name__ == "__main__":
     # Create upload folders if they don't exist
     for folder in [app.config['UPLOAD_FOLDER'], app.config['PROFILE_UPLOAD_FOLDER']]:
         if not os.path.exists(folder):
@@ -1416,22 +1401,15 @@ def setup_application():
 
     # Create indexes only if they don't exist
     existing_indexes = users_collection.index_information()
+
     if "username_1" not in existing_indexes:
         users_collection.create_index([("username", 1)], unique=True)
     
-    existing_rooms_indexes = rooms_collection.index_information()
-    if "users_1" not in existing_rooms_indexes:
+    if "users_1" not in rooms_collection.index_information():
         rooms_collection.create_index([("users", 1)])
     
-    if "messages.id_1" not in existing_rooms_indexes:
+    if "messages.id_1" not in rooms_collection.index_information():
         rooms_collection.create_index([("messages.id", 1)])
-
-# Wrap the app for ASGI compatibility
-app_asgi = WSGIApp(socketio)
-
-if __name__ == "__main__":
-    setup_application()  # Call the setup function for direct runs
-    port = int(os.environ.get("PORT", 5002))
-    socketio.run(app, host='0.0.0.0', port=port)
-
-#uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4
+    
+    port = int(os.environ.get("PORT", 5001))
+    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, host='0.0.0.0', port=port)
