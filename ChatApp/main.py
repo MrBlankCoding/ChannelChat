@@ -1,4 +1,6 @@
 # Standard library imports
+import eventlet
+eventlet.monkey_patch()
 import os
 import json
 import random
@@ -1412,4 +1414,6 @@ if __name__ == "__main__":
         rooms_collection.create_index([("messages.id", 1)])
     
     port = int(os.environ.get("PORT", 5001))
-    socketio.run(app, debug=True, allow_unsafe_werkzeug=True, host='0.0.0.0', port=port)
+    socketio.run(app, host='0.0.0.0', port=port)
+
+#gunicorn --worker-class eventlet -w 9 --timeout 30 --bind 127.0.0.1:8000 main:app
