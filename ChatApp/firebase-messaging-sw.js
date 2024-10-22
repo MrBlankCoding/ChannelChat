@@ -1,4 +1,3 @@
-// firebase-messaging-sw.js
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.4.1/workbox-sw.js');
@@ -29,9 +28,49 @@ messaging.onBackgroundMessage(function(payload) {
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
-// Use Workbox to configure caching strategies
+// Create a specific cache for profile photos
+const PROFILE_CACHE = 'profile-photos';
+
+// Custom plugin to handle profile photo cache cleanup
+const profilePhotoCachePlugin = {
+  cacheDidUpdate: async ({cacheName, request, oldResponse, newResponse}) => {
+    if (cacheName === PROFILE_CACHE && oldResponse) {
+      const cache = await caches.open(PROFILE_CACHE);
+      const keys = await cache.keys();
+      const oldProfileUrl = request.url.split('?')[0]; // Remove cache busting parameter
+      
+      // Find and remove old versions of this user's profile photo
+      for (const key of keys) {
+        const keyUrl = key.url.split('?')[0];
+        if (keyUrl === oldProfileUrl && key.url !== request.url) {
+          await cache.delete(key);
+        }
+      }
+    }
+  }
+};
+
+// Special handling for profile photos
 workbox.routing.registerRoute(
-  ({request}) => request.destination === 'image',
+  ({url}) => url.pathname.includes('profile_'),
+  new workbox.strategies.CacheFirst({
+    cacheName: PROFILE_CACHE,
+    plugins: [
+      profilePhotoCachePlugin,
+      new workbox.cacheableResponse.CacheableResponsePlugin({
+        statuses: [0, 200],
+      }),
+      new workbox.expiration.ExpirationPlugin({
+        maxEntries: 60,
+        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
+      }),
+    ],
+  })
+);
+
+// General image caching (excluding profile photos)
+workbox.routing.registerRoute(
+  ({request, url}) => request.destination === 'image' && !url.pathname.includes('profile_'),
   new workbox.strategies.CacheFirst({
     cacheName: 'images',
     plugins: [
