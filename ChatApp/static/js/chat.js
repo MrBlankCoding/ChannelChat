@@ -256,43 +256,48 @@ socketio.on('update_reactions', (data) => {
 
 const editMessage = (messageId) => {
   const messageElement = document.querySelector(`[data-message-id="${messageId}"]`);
+  if (!messageElement) return;
+  
   const messageContent = messageElement.querySelector('.message-content');
+  if (!messageContent) return;
+  
   const currentText = messageContent.textContent;
   const isCurrentUser = messageElement.classList.contains('bg-indigo-600');
 
+  // Create input element
   const input = document.createElement('input');
   input.type = 'text';
   input.value = currentText;
   input.className = `rounded-md p-1 w-full ${
-    isCurrentUser 
-      ? 'bg-indigo-700 text-white placeholder-indigo-300 border border-indigo-400' 
-      : 'bg-white text-gray-900 border border-gray-300'
+      isCurrentUser 
+          ? 'bg-indigo-700 text-white placeholder-indigo-300 border border-indigo-400' 
+          : 'bg-white text-gray-900 border border-gray-300'
   }`;
   
   messageContent.replaceWith(input);
   input.focus();
 
   const handleEdit = (event) => {
-    if (event.key === 'Enter' || event.type === 'blur') {
-      const newText = input.value.trim();
-      if (newText !== '' && newText !== currentText) {
-        socketio.emit('edit_message', { messageId, newText });
+      if (event.key === 'Enter' || event.type === 'blur') {
+          const newText = input.value.trim();
+          if (newText !== '' && newText !== currentText) {
+              socketio.emit('edit_message', { messageId, newText });
+          }
+          finishEdit(newText || currentText, isCurrentUser);
+      } else if (event.key === 'Escape') {
+          finishEdit(currentText, isCurrentUser);
       }
-      finishEdit(newText, isCurrentUser);
-    } else if (event.key === 'Escape') {
-      finishEdit(currentText, isCurrentUser);
-    }
   };
 
-  const finishEdit = (newText, isCurrentUser) => {
-    input.removeEventListener('keyup', handleEdit);
-    input.removeEventListener('blur', handleEdit);
+  const finishEdit = (text, isCurrentUser) => {
+      input.removeEventListener('keyup', handleEdit);
+      input.removeEventListener('blur', handleEdit);
 
-    const newMessageContent = document.createElement('div');
-    newMessageContent.className = `message-content ${isCurrentUser ? 'text-white' : 'text-gray-900'}`;
-    newMessageContent.textContent = newText;
-    
-    input.replaceWith(newMessageContent);
+      const newMessageContent = document.createElement('div');
+      newMessageContent.className = `message-content ${isCurrentUser ? 'text-white' : 'text-gray-900'}`;
+      newMessageContent.textContent = text;
+      
+      input.replaceWith(newMessageContent);
   };
 
   input.addEventListener('keyup', handleEdit);
@@ -576,10 +581,12 @@ function loadMoreMessages() {
 socketio.on("edit_message", (data) => {
   const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
   if (messageElement) {
-    const messageContent = messageElement.querySelector('.message-content');
-    const isCurrentUser = messageElement.classList.contains('bg-indigo-600');
-    messageContent.className = `message-content ${isCurrentUser ? 'text-white' : 'text-gray-900'}`;
-    messageContent.textContent = data.newText;
+      const messageContent = messageElement.querySelector('.message-content');
+      if (messageContent) {
+          const isCurrentUser = messageElement.classList.contains('bg-indigo-600');
+          messageContent.className = `message-content ${isCurrentUser ? 'text-white' : 'text-gray-900'}`;
+          messageContent.textContent = data.newText;
+      }
   }
 });
   

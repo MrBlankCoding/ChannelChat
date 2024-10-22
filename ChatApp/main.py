@@ -1295,19 +1295,24 @@ def edit_message(data):
     if not room:
         return
 
-    # Update message in MongoDB
+    # Update message in MongoDB - fixed array element matching
     result = rooms_collection.update_one(
         {
             "_id": room,
-            "messages.id": data["messageId"],
-            "messages.name": name
+            "messages": {
+                "$elemMatch": {
+                    "id": data["messageId"],
+                    "name": name  # Ensure only message owner can edit
+                }
+            }
         },
         {
             "$set": {
-                "messages.$.message": data["newText"],
-                "messages.$.edited": True
+                "messages.$[elem].message": data["newText"],
+                "messages.$[elem].edited": True
             }
-        }
+        },
+        array_filters=[{"elem.id": data["messageId"]}]
     )
     
     if result.modified_count:
