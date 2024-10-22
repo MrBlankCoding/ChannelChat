@@ -56,67 +56,6 @@ document.addEventListener('DOMContentLoaded', function() {
         document.getElementById(`${tab}-content`).classList.remove('hidden');
     }
 
-    // =========================================
-    // Friend Management
-    // =========================================
-    function removeFriend(username) {
-        friendToRemove = username;
-        showConfirmationModal(username);
-    }
-
-    function showConfirmationModal(username) {
-        const modal = document.getElementById('confirmationModal');
-        const confirmBtn = modal.querySelector('#confirmDelete');
-        const cancelBtn = modal.querySelector('button:first-of-type');
-        
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-        
-        const handleConfirm = async () => {
-            try {
-                const response = await fetch(`/remove_friend/${username}`, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.content
-                    }
-                });
-                
-                if (!response.ok) {
-                    throw new Error('Failed to remove friend');
-                }
-                
-                const friendElement = document.querySelector(`[data-friend-username="${username}"]`);
-                if (friendElement) {
-                    friendElement.remove();
-                }
-                
-                showNotification('Friend removed successfully');
-                
-            } catch (error) {
-                console.error('Error removing friend:', error);
-                showNotification('Failed to remove friend', 'error');
-            } finally {
-                hideModal();
-            }
-        };
-        
-        const handleCancel = () => {
-            hideModal();
-        };
-        
-        confirmBtn.replaceWith(confirmBtn.cloneNode(true));
-        cancelBtn.replaceWith(cancelBtn.cloneNode(true));
-        
-        modal.querySelector('#confirmDelete').addEventListener('click', handleConfirm);
-        modal.querySelector('button:first-of-type').addEventListener('click', handleCancel);
-    }
-
-    function hideModal() {
-        const modal = document.getElementById('confirmationModal');
-        modal.classList.remove('flex');
-        modal.classList.add('hidden');
-    }
 
     // =========================================
     // Room Management
@@ -148,35 +87,6 @@ document.addEventListener('DOMContentLoaded', function() {
     function toggleRoomInvites() {
         const content = document.getElementById('roomInvitesContent');
         content.classList.toggle('hidden');
-    }
-
-    // =========================================
-    // Notifications
-    // =========================================
-    function showNotification(message, type = 'success') {
-        const notificationContainer = document.createElement('div');
-        notificationContainer.className = `fixed bottom-4 right-4 z-50 bg-white border-l-4 ${
-            type === 'success' ? 'border-green-500' : 'border-red-500'
-        } rounded-lg shadow-lg p-4 mb-4 animate-fade-in flex items-center justify-between`;
-        
-        notificationContainer.innerHTML = `
-            <div class="flex items-center">
-                <svg class="h-5 w-5 ${type === 'success' ? 'text-green-500' : 'text-red-500'} mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    ${
-                        type === 'success'
-                            ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />'
-                            : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />'
-                    }
-                </svg>
-                <span class="text-gray-800">${message}</span>
-            </div>
-        `;
-        
-        document.body.appendChild(notificationContainer);
-        
-        setTimeout(() => {
-            notificationContainer.remove();
-        }, 3000);
     }
 
     // =========================================
