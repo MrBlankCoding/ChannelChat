@@ -31,7 +31,9 @@ import imghdr
 load_dotenv()
 
 cred = credentials.Certificate("serviceAccountKey.json")
-firebase_admin.initialize_app(cred)
+firebase_admin.initialize_app(cred, {
+    'storageBucket': 'channelchat-7d679.appspot.com'
+})
 
 app = Flask(__name__)
 scheduler = BackgroundScheduler()
@@ -50,7 +52,6 @@ app.config['ALLOWED_IMAGE_TYPES'] = {'png', 'jpeg', 'jpg', 'gif'}
 app.config['PROFILE_UPLOAD_FOLDER'] = 'profile_photos'
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit
-storage_url = os.getenv("FIREBASE_STORAGE_URL")
 
 # Initialize MongoDB client using the URI from .env
 client = MongoClient(os.getenv("MONGO_URI"))
@@ -134,13 +135,19 @@ def save_profile_photo(file, username):
     """Helper function to save and process profile photos in Firebase Cloud Storage"""
     if not file:
         return None
-        
-    # Verify file type
+
+    # Verify file type and size
+    allowed_types = ['png', 'jpg', 'jpeg', 'gif']
     file_bytes = file.read()
     file_type = imghdr.what(None, h=file_bytes)
     
-    if file_type not in app.config['ALLOWED_IMAGE_TYPES']:
-        flash("Invalid image type. Allowed types: PNG, JPEG, JPG, GIF")
+    if file_type not in allowed_types:
+        flash("Invalid image type. Allowed types: PNG, JPG, GIF")
+        return None
+
+    # Check file size (optional, e.g., max 5MB)
+    if len(file_bytes) > 5 * 1024 * 1024:
+        flash("File too large. Maximum size is 5MB.")
         return None
         
     try:
@@ -166,7 +173,7 @@ def save_profile_photo(file, username):
         
         return blob.public_url
     except Exception as e:
-        flash("Error processing profile photo")
+        flash("Error processing profile photo: " + str(e))
         return None
     
 # Set up the background scheduler
@@ -221,10 +228,14 @@ def profile_photo(username):
     for ext in app.config['ALLOWED_IMAGE_TYPES']:
         filename = f"profile_{username}.{ext}"
         blob = storage.bucket().blob(filename)
-        if blob.exists():
-            # Use the public URL directly from the blob
-            return redirect(blob.public_url)
-    
+        
+        try:
+            exists = blob.exists()
+            if exists:
+                return redirect(blob.public_url)
+        except Exception as e:
+            print(f"Error checking blob existence: {e}")
+
     # If no profile photo is found, return the default profile image
     return redirect(url_for('default_profile'))
 
@@ -389,21 +400,25 @@ def settings():
         
         username = current_user.username
         user_data = users_collection.find_one({"username": username})
-        
+
         # Handle profile photo upload
         if profile_photo:
-            filename = save_profile_photo(profile_photo, username)
-            if filename:
+            public_url = save_profile_photo(profile_photo, username)
+            if public_url:
                 users_collection.update_one(
                     {"username": username},
-                    {"$set": {"profile_photo": filename}}
+                    {"$set": {"profile_photo": public_url}}
                 )
                 flash("Profile photo updated successfully!")
+            else:
+                flash("Failed to upload profile photo. Please try again.")
         
+        # Validate current password
         if current_password and not check_password_hash(user_data["password"], current_password):
             flash("Current password is incorrect!")
             return redirect(url_for("settings"))
         
+        # Update username
         if new_username and new_username != username:
             if not is_valid_username(new_username):
                 flash("Username can only contain letters, numbers, dots, underscores, and hyphens.")
@@ -413,7 +428,6 @@ def settings():
                 flash("Username already exists!")
                 return redirect(url_for("settings"))
                 
-            # Update username
             users_collection.update_one(
                 {"username": username},
                 {"$set": {"username": new_username}}
@@ -421,6 +435,7 @@ def settings():
             current_user.username = new_username
             flash("Username updated successfully!")
         
+        # Update password
         if new_password:
             if not is_strong_password(new_password):
                 flash("Password must be at least 8 characters long and include letters and numbers.")
@@ -430,7 +445,6 @@ def settings():
                 flash("New passwords do not match!")
                 return redirect(url_for("settings"))
                 
-            # Update password
             users_collection.update_one(
                 {"username": username},
                 {"$set": {"password": generate_password_hash(new_password)}}
@@ -441,6 +455,7 @@ def settings():
     
     user_data = users_collection.find_one({"username": current_user.username})
     return render_template("settings.html", user_data=user_data)
+
     
 def handle_friend_request(username, friend_username):
     friend_data = users_collection.find_one({"username": friend_username})
@@ -1209,9 +1224,7 @@ def message(data):
         if username != sender_username:
             user_data = users_collection.find_one({"username": username}, {"fcm_token": 1})
             if user_data and "fcm_token" in user_data:
-                print(f"Sending push notification to {username} with token: {user_data['fcm_token']}")
                 send_push_notification(user_data["fcm_token"], content)
-                print("Sent Push Notif")
             else:
                 print(f"FCM token not found for {username}")
 

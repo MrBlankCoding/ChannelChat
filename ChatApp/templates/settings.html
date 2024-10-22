@@ -138,16 +138,6 @@
          html.classList.add('dark');
       }
    });
-   document.addEventListener('DOMContentLoaded', function() {
-      // Get the username from localStorage
-      const username = localStorage.getItem('username');
-      
-      // If the username exists, load the profile photo
-      if (username) {
-          const profilePhotoElement = document.getElementById('profile-photo');
-          profilePhotoElement.src = `/profile_photos/${username}`;
-      }
-  });
 </script>
 <style>
    .tab {

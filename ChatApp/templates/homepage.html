@@ -12,7 +12,7 @@
                      id="profile-photo" 
                      src="{{ url_for('profile_photo', username=current_user.username) }}" 
                      alt="Profile photo" 
-                     onerror="this.onerror=null; this.src='{{ url_for('default_profile') }}';">                
+                     onerror="this.onerror=null; this.src='{{ url_for('default_profile') }}'; console.log('Fallback to default profile image');">                           
                      <div class="ml-4">
                         <h1 class="text-2xl font-bold leading-7 text-gray-900 dark:text-white sm:text-3xl sm:truncate">
                            Welcome back, {{ username }}
