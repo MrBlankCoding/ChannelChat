@@ -387,6 +387,47 @@ def logout():
     flash("You have been logged out.")
     return redirect(url_for("login"))
 
+@app.route("/delete_account", methods=["POST"])
+@login_required
+def delete_account():
+    username = current_user.username
+
+    # Remove user from all rooms they are part of
+    rooms_collection.update_many(
+        {"members": username},
+        {"$pull": {"members": username}}
+    )
+
+    # Remove friend relationships
+    users_collection.update_many(
+        {"friends": username},
+        {"$pull": {"friends": username}}
+    )
+    
+    # Remove any pending friend requests sent by the user
+    users_collection.update_many(
+        {"friend_requests": username},
+        {"$pull": {"friend_requests": username}}
+    )
+
+    # Remove any pending friend requests received by the user
+    users_collection.update_one(
+        {"username": username},
+        {"$set": {"friend_requests": []}}
+    )
+
+    # Delete user's heartbeat entry if present
+    heartbeats_collection.delete_one({"username": username})
+
+    # Delete user from the users collection
+    users_collection.delete_one({"username": username})
+
+    # Log out the user after account deletion
+    logout_user()
+
+    flash("Your account has been deleted.")
+    return redirect(url_for("register"))
+
 @app.route("/settings", methods=["GET", "POST"])
 @login_required
 def settings():

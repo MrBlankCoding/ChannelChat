@@ -1,4 +1,3 @@
-42. Make images delete after they have been opened -> Snapchat model. 
 49. GIF API
 50. Message reactions -> fix
 51. Make it so profile photos work on mobile
@@ -10,6 +9,4 @@
 61. sound effect for reactions, replys, images
 62. themed chats
 63. audio messages
-64. Fix read
-65. Delete account button
 66. UI for edited messages
