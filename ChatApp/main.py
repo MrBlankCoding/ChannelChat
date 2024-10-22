@@ -1,32 +1,25 @@
 # Standard library imports
 import os
-import json
 import random
 import re
 import base64
 import io
 from datetime import timedelta, datetime
 from string import ascii_uppercase
-from functools import wraps
-from datetime import datetime, timedelta
-import hashlib
 
 # Third-party library imports
 from flask import Flask, render_template, request, session, redirect, url_for, send_from_directory, flash, jsonify
 from flask_socketio import join_room, leave_room, send, SocketIO
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
-from firebase_admin import credentials, messaging, initialize_app, storage
+from firebase_admin import credentials, messaging, storage
 import firebase_admin
-from werkzeug.utils import secure_filename
 from werkzeug.security import generate_password_hash, check_password_hash
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
 from PIL import Image
 from pymongo import MongoClient
 from fuzzywuzzy import fuzz
-from fuzzywuzzy import process
 from bson import ObjectId
-import requests
 import imghdr
 
 load_dotenv()
@@ -50,7 +43,6 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config['ALLOWED_IMAGE_TYPES'] = {'png', 'jpeg', 'jpg', 'gif'}
 app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16 MB limit
 
 # Initialize MongoDB client using the URI from .env
 client = MongoClient(os.getenv("MONGO_URI"))
@@ -131,7 +123,7 @@ def register_fcm_token():
     return jsonify({"error": "Invalid data"}), 400
 
 def save_profile_photo(file, username, current_photo_url=None):
-    """Helper function to save and process profile photos with cache invalidation"""
+    """Helper function to save and process profile photos, including removing old ones without cache invalidation."""
     if not file:
         return None
 
@@ -152,12 +144,10 @@ def save_profile_photo(file, username, current_photo_url=None):
     try:
         # Delete the old profile photo if it exists
         if current_photo_url:
-            # Remove cache busting parameter if present
-            base_url = current_photo_url.split('?')[0]
-            old_filename = base_url.split('/')[-1]
+            old_filename = current_photo_url.split('/')[-1]  # Extract the filename from the URL
             bucket = storage.bucket()
             old_blob = bucket.blob(old_filename)
-            old_blob.delete()
+            old_blob.delete()  # Remove the old profile photo from storage
         
         # Process image with PIL
         image = Image.open(io.BytesIO(file_bytes))
@@ -179,8 +169,8 @@ def save_profile_photo(file, username, current_photo_url=None):
         # Make the image publicly accessible
         blob.make_public()
         
-        # Return URL with cache busting parameter
-        return get_cache_busting_url(blob.public_url)
+        # Return the public URL of the new image
+        return blob.public_url
     except Exception as e:
         flash("Error processing profile photo: " + str(e))
         return None
@@ -231,14 +221,9 @@ def stop_heartbeat():
     )
     return "", 204
 
-def get_cache_busting_url(url):
-    """Add a timestamp query parameter to bust the cache"""
-    timestamp = int(datetime.now().timestamp())
-    return f"{url}?v={timestamp}"
-
 @app.route('/profile_photos/<username>')
 def profile_photo(username):
-    """Serve the user's profile photo from Firebase Cloud Storage with cache busting"""
+    """Serve the user's profile photo from Firebase Cloud Storage"""
     for ext in app.config['ALLOWED_IMAGE_TYPES']:
         filename = f"profile_{username}.{ext}"
         blob = storage.bucket().blob(filename)
@@ -246,8 +231,7 @@ def profile_photo(username):
         try:
             exists = blob.exists()
             if exists:
-                # Add cache busting parameter to the URL
-                return redirect(get_cache_busting_url(blob.public_url))
+                return redirect(blob.public_url)
         except Exception as e:
             print(f"Error checking blob existence: {e}")
 
@@ -418,9 +402,7 @@ def settings():
 
         # Handle profile photo upload
         if profile_photo:
-            current_photo_url = user_data.get("profile_photo")  # Get the current profile photo URL
-            public_url = save_profile_photo(profile_photo, username, current_photo_url)  # Pass the current URL for deletion
-            
+            public_url = save_profile_photo(profile_photo, username)
             if public_url:
                 users_collection.update_one(
                     {"username": username},
@@ -435,15 +417,44 @@ def settings():
             flash("Current password is incorrect!")
             return redirect(url_for("settings"))
         
-        # Update username logic remains the same
+        # Update username
+        if new_username and new_username != username:
+            if not is_valid_username(new_username):
+                flash("Username can only contain letters, numbers, dots, underscores, and hyphens.")
+                return redirect(url_for("settings"))
+                
+            if users_collection.find_one({"username": new_username}):
+                flash("Username already exists!")
+                return redirect(url_for("settings"))
+                
+            users_collection.update_one(
+                {"username": username},
+                {"$set": {"username": new_username}}
+            )
+            current_user.username = new_username
+            flash("Username updated successfully!")
         
-        # Update password logic remains the same
+        # Update password
+        if new_password:
+            if not is_strong_password(new_password):
+                flash("Password must be at least 8 characters long and include letters and numbers.")
+                return redirect(url_for("settings"))
+                
+            if new_password != confirm_new_password:
+                flash("New passwords do not match!")
+                return redirect(url_for("settings"))
+                
+            users_collection.update_one(
+                {"username": username},
+                {"$set": {"password": generate_password_hash(new_password)}}
+            )
+            flash("Password updated successfully!")
         
         return redirect(url_for("settings"))
     
     user_data = users_collection.find_one({"username": current_user.username})
     return render_template("settings.html", user_data=user_data)
-    
+
 def handle_friend_request(username, friend_username):
     friend_data = users_collection.find_one({"username": friend_username})
     if not friend_data:
@@ -505,69 +516,6 @@ def add_friend():
     
     flash(f"Friend request sent to {friend_username}!")
     return redirect(url_for("home"))
-
-@app.route('/search_users', methods=["GET"])
-@login_required
-def search_users():
-    query = request.args.get("q", "").lower().strip()
-    if not query:
-        return jsonify([])
-
-    # Get current user's data for exclusion list
-    current_user_data = users_collection.find_one({"username": current_user.username})
-    friends_list = current_user_data.get("friends", [])
-
-    # First, get all eligible users (excluding current user and friends)
-    all_users = list(users_collection.find(
-        {
-            "username": {"$ne": current_user.username},
-            "username": {"$nin": friends_list}
-        },
-        {"username": 1}  # We don't need to fetch profile_photo field since we're using the route
-    ))
-
-    # If it's just one character, only match first letter
-    if len(query) == 1:
-        matching_users = [
-            user for user in all_users 
-            if user["username"].lower().startswith(query)
-        ]
-    else:
-        # For longer queries, use fuzzy matching
-        username_matches = [
-            (user, fuzz.ratio(query, user["username"].lower()))
-            for user in all_users
-        ]
-
-        # Filter based on different criteria depending on query length
-        if len(query) <= 3:
-            matching_users = [
-                user for user, score in username_matches
-                if score > 50 or user["username"].lower().startswith(query)
-            ]
-        else:
-            matching_users = [
-                user for user, score in username_matches
-                if score > 70
-            ]
-
-        # Sort by similarity score
-        matching_users.sort(
-            key=lambda x: fuzz.ratio(query, x["username"].lower()),
-            reverse=True
-        )
-
-    # Limit results
-    matching_users = matching_users[:5]
-
-    # Format response using the profile_photo route
-    suggestions = [{
-        "username": user["username"],
-        "profile_photo_url": url_for('profile_photo', username=user["username"], _external=True),
-        "similarity": fuzz.ratio(query, user["username"].lower())
-    } for user in matching_users]
-
-    return jsonify(suggestions)
 
 @app.route("/accept_friend/<username>")
 @login_required
@@ -639,6 +587,123 @@ def remove_friend(username):
     
     return jsonify({"error": "Not friends"}), 400
 
+@app.route("/", methods=["POST", "GET"])
+@login_required
+def home():
+    username = current_user.username
+    
+    # Get or create user data
+    user_data = users_collection.find_one({"username": username})
+    if not user_data:
+        # Initialize new user data if it doesn't exist
+        user_data = {
+            "username": username,
+            "rooms": [],
+            "friends": [],
+            "friend_requests": [],
+            "online": True,
+            "current_room": None
+        }
+        users_collection.insert_one(user_data)
+    
+    if request.method == "POST":
+        code = request.form.get("code")
+        join = request.form.get("join", False)
+        create = request.form.get("create", False)
+        friend_username = request.form.get("friend_username")
+
+        # Handle friend request
+        if friend_username:
+            return handle_friend_request(username, friend_username)
+
+        # Handle room operations
+        if join != False and not code:
+            flash("Please enter a room code.")
+            return redirect(url_for("home"))
+        
+        return handle_room_operation(username, code, create, join)
+
+    # Get friends data with online status and current rooms
+    friends_data = []
+    for friend in user_data.get("friends", []):
+        friend_data = users_collection.find_one({"username": friend})
+        if friend_data:
+            friends_data.append({
+                "username": friend,
+                "online": friend_data.get("online", False),
+                "current_room": friend_data.get("current_room")
+            })
+
+    return render_template("homepage.html",
+                         username=username,
+                         user_data=user_data,
+                         friends=friends_data,
+                         friend_requests=user_data.get("friend_requests", []))
+    
+@app.route('/search_users', methods=["GET"])
+@login_required
+def search_users():
+    query = request.args.get("q", "").lower().strip()
+    if not query:
+        return jsonify([])
+
+    # Get current user's data for exclusion list
+    current_user_data = users_collection.find_one({"username": current_user.username})
+    friends_list = current_user_data.get("friends", [])
+
+    # First, get all eligible users (excluding current user and friends)
+    all_users = list(users_collection.find(
+        {
+            "username": {"$ne": current_user.username},
+            "username": {"$nin": friends_list}
+        },
+        {"username": 1}  # We don't need to fetch profile_photo field since we're using the route
+    ))
+
+    # If it's just one character, only match first letter
+    if len(query) == 1:
+        matching_users = [
+            user for user in all_users 
+            if user["username"].lower().startswith(query)
+        ]
+    else:
+        # For longer queries, use fuzzy matching
+        username_matches = [
+            (user, fuzz.ratio(query, user["username"].lower()))
+            for user in all_users
+        ]
+
+        # Filter based on different criteria depending on query length
+        if len(query) <= 3:
+            matching_users = [
+                user for user, score in username_matches
+                if score > 50 or user["username"].lower().startswith(query)
+            ]
+        else:
+            matching_users = [
+                user for user, score in username_matches
+                if score > 70
+            ]
+
+        # Sort by similarity score
+        matching_users.sort(
+            key=lambda x: fuzz.ratio(query, x["username"].lower()),
+            reverse=True
+        )
+
+    # Limit results
+    matching_users = matching_users[:5]
+
+    # Format response using the profile_photo route
+    suggestions = [{
+        "username": user["username"],
+        "profile_photo_url": url_for('profile_photo', username=user["username"], _external=True),
+        "similarity": fuzz.ratio(query, user["username"].lower())
+    } for user in matching_users]
+
+    return jsonify(suggestions)
+    
+    
 @app.route("/delete_room/<room_code>")
 def delete_room(room_code):
     username = current_user.username
@@ -795,24 +860,7 @@ def handle_room_operation(username, code, create, join):
     )
     
     return redirect(url_for("room"))
-
-def get_room_data(room_code):
-    """Get room data from MongoDB"""
-    try:
-        room_data = rooms_collection.find_one({"_id": room_code})
-        if not room_data:
-            return None
-        
-        # Ensure all required fields exist
-        room_data.setdefault("users", [])
-        room_data.setdefault("messages", [])
-        room_data.setdefault("created_by", "Unknown")
-        
-        return room_data
-        
-    except Exception as e:
-        return None
-
+    
 @app.route("/join_friend_room/<friend_username>")
 @login_required
 def join_friend_room(friend_username):
@@ -846,93 +894,22 @@ def join_friend_room(friend_username):
     
     return redirect(url_for("room"))
 
-@app.route("/exit_room/<code>")
-@login_required
-def exit_room(code):
-    username = current_user.username
-    user_data = users_collection.find_one({"username": username})
-    
-    # Verify the room exists
-    room_data = rooms_collection.find_one({"_id": code})
-    if not room_data:
-        flash("Room does not exist.")
-        return redirect(url_for("home"))
-    
-    # Verify user is not the room owner
-    if room_data["created_by"] == username:
-        flash("Room owners cannot leave their own rooms. You must delete the room instead.")
-        return redirect(url_for("home"))
-    
-    # Update user data
-    result = users_collection.update_one(
-        {"username": username},
-        {
-            "$pull": {"rooms": code},
-            "$set": {"current_room": None}
-        }
-    )
-    
-    # Always remove the user from the room's user list when exiting
-    rooms_collection.update_one(
-        {"_id": code},
-        {"$pull": {"users": username}}
-    )
-    
-    flash("You have left the room successfully.")
-    return redirect(url_for("home"))
-
-@app.route("/", methods=["POST", "GET"])
-@login_required
-def home():
-    username = current_user.username
-    
-    # Get or create user data
-    user_data = users_collection.find_one({"username": username})
-    if not user_data:
-        # Initialize new user data if it doesn't exist
-        user_data = {
-            "username": username,
-            "rooms": [],
-            "friends": [],
-            "friend_requests": [],
-            "online": True,
-            "current_room": None
-        }
-        users_collection.insert_one(user_data)
-    
-    if request.method == "POST":
-        code = request.form.get("code")
-        join = request.form.get("join", False)
-        create = request.form.get("create", False)
-        friend_username = request.form.get("friend_username")
-
-        # Handle friend request
-        if friend_username:
-            return handle_friend_request(username, friend_username)
-
-        # Handle room operations
-        if join != False and not code:
-            flash("Please enter a room code.")
-            return redirect(url_for("home"))
+def get_room_data(room_code):
+    """Get room data from MongoDB"""
+    try:
+        room_data = rooms_collection.find_one({"_id": room_code})
+        if not room_data:
+            return None
         
-        return handle_room_operation(username, code, create, join)
-
-    # Get friends data with online status and current rooms
-    friends_data = []
-    for friend in user_data.get("friends", []):
-        friend_data = users_collection.find_one({"username": friend})
-        if friend_data:
-            friends_data.append({
-                "username": friend,
-                "online": friend_data.get("online", False),
-                "current_room": friend_data.get("current_room")
-            })
-
-    return render_template("homepage.html",
-                         username=username,
-                         user_data=user_data,
-                         friends=friends_data,
-                         friend_requests=user_data.get("friend_requests", []))
+        # Ensure all required fields exist
+        room_data.setdefault("users", [])
+        room_data.setdefault("messages", [])
+        room_data.setdefault("created_by", "Unknown")
+        
+        return room_data
+        
+    except Exception as e:
+        return None
 
 @app.route("/room/", defaults={'code': None})
 @app.route("/room/<code>")
@@ -1013,6 +990,41 @@ def room(code):
     except Exception as e:
         flash("Error loading room data")
         return redirect(url_for("home"))
+    
+@app.route("/exit_room/<code>")
+@login_required
+def exit_room(code):
+    username = current_user.username
+    user_data = users_collection.find_one({"username": username})
+    
+    # Verify the room exists
+    room_data = rooms_collection.find_one({"_id": code})
+    if not room_data:
+        flash("Room does not exist.")
+        return redirect(url_for("home"))
+    
+    # Verify user is not the room owner
+    if room_data["created_by"] == username:
+        flash("Room owners cannot leave their own rooms. You must delete the room instead.")
+        return redirect(url_for("home"))
+    
+    # Update user data
+    result = users_collection.update_one(
+        {"username": username},
+        {
+            "$pull": {"rooms": code},
+            "$set": {"current_room": None}
+        }
+    )
+    
+    # Always remove the user from the room's user list when exiting
+    rooms_collection.update_one(
+        {"_id": code},
+        {"$pull": {"users": username}}
+    )
+    
+    flash("You have left the room successfully.")
+    return redirect(url_for("home"))
     
 @socketio.on("connect")
 def connect():
