@@ -112,9 +112,14 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
   messageBubble.className = `group relative p-4 rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 ${isCurrentUser ? 'bg-blue-500 text-white border border-blue-600' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600'}`;
   messageBubble.dataset.messageId = messageId;
 
+  // Add the read message class here
+  if (messageElement.classList.contains('read-message')) {
+    messageBubble.classList.add('bg-purple-200'); // Change this to a color that indicates read status
+  }
+
   const messageContainer = document.createElement("div");
   messageContainer.className = "flex items-start gap-1";
-  
+
   const messageContent = document.createElement("div");
   messageContent.className = "message-content leading-relaxed break-words text-base font-medium";
   messageContent.textContent = msg || "Sent an image";
@@ -170,6 +175,15 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
 
   return element;
 };
+
+// CSS styles
+const styles = `
+  .read-message {
+    background-color: #E0E7FF; /* Light purple background */
+    border: 2px solid #4E46DC; /* Purple border for read messages */
+  }
+`;
+document.head.insertAdjacentHTML('beforeend', `<style>${styles}</style>`);
 
 const createActionsMenu = (isCurrentUser) => {
   const actionsMenu = document.createElement("div");
@@ -590,7 +604,7 @@ socketio.on("messages_read", (data) => {
   message_ids.forEach(id => {
     const messageElement = document.querySelector(`[data-message-id="${id}"]`);
     if (messageElement && reader !== currentUser) {
-      messageElement.style.backgroundColor = '#4E46DC'; // Purple color
+      messageElement.classList.add('read-message'); // Add a class for styling
     }
   });
 });
