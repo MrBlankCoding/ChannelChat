@@ -109,17 +109,16 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
   }
 
   const messageBubble = document.createElement("div");
-  messageBubble.className = `group relative p-3 rounded-2xl shadow-sm max-w-[85%] md:max-w-[70%] transition-shadow duration-200 ${isCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'}`;
+  messageBubble.className = `group relative p-4 rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 ${isCurrentUser ? 'bg-blue-500 text-white border border-blue-600' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600'}`;
   messageBubble.dataset.messageId = messageId;
 
   const messageContainer = document.createElement("div");
   messageContainer.className = "flex items-start gap-1";
   
   const messageContent = document.createElement("div");
-  messageContent.className = "message-content leading-relaxed break-words";
+  messageContent.className = "message-content leading-relaxed break-words text-base font-medium";
   messageContent.textContent = msg || "Sent an image";
 
-  // Add edit indicator if message was edited
   if (isEdited) {
     const editedIndicator = document.createElement("span");
     editedIndicator.className = `edited-indicator text-xs ${isCurrentUser ? 'text-white/70' : 'text-gray-500 dark:text-gray-400'}`;
@@ -132,11 +131,9 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
 
   messageBubble.appendChild(messageContainer);
 
-  // Reactions container
   const reactionsContainer = document.createElement("div");
   reactionsContainer.className = "reactions-container flex flex-wrap gap-1 mt-1";
   
-  // Populate existing reactions
   if (Object.keys(reactions).length > 0) {
     Object.entries(reactions).forEach(([emoji, reactionData]) => {
       if (reactionData.count > 0) {
@@ -148,31 +145,27 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
   
   messageBubble.appendChild(reactionsContainer);
 
-  // Reply information if applicable
   if (replyTo) {
     const replyInfo = document.createElement("div");
-    replyInfo.className = `reply-info mt-2 text-sm ${isCurrentUser ? 'text-white/75' : 'text-gray-500 dark:text-gray-400'} pl-3 border-l-2 border-current`;
+    replyInfo.className = `reply-info mt-2 text-sm ${isCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'} pl-3 border-l-2 border-current p-2 rounded-md`;
     replyInfo.dataset.replyTo = replyTo.id;
     replyInfo.innerHTML = `Replying to: <span class="replied-message italic">${replyTo.message}</span>`;
     messageBubble.appendChild(replyInfo);
   }
 
-  // Add image if present
   if (image) {
     const img = document.createElement("img");
     img.src = image;
     img.alt = "Uploaded image";
-    img.className = "mt-2 max-w-full rounded-lg";
+    img.className = "mt-2 max-w-full rounded-lg border border-gray-300 shadow-sm";
     messageBubble.appendChild(img);
   }
 
-  // Add actions menu
   const actionsMenu = createActionsMenu(isCurrentUser);
   messageBubble.appendChild(actionsMenu);
 
   element.appendChild(messageBubble);
 
-  // Add event listeners (e.g., click, hover, etc.)
   addEventListeners(messageBubble, messageId, msg);
 
   return element;
@@ -181,7 +174,7 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
 const createActionsMenu = (isCurrentUser) => {
   const actionsMenu = document.createElement("div");
   actionsMenu.className = `actions-menu opacity-0 group-hover:opacity-100 absolute -top-8 ${isCurrentUser ? 'right-0' : 'left-0'} 
-    flex items-center space-x-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg px-2 py-1 transition-opacity duration-200 z-10`;
+    flex items-center space-x-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg px-2 py-1 transition-opacity duration-200 z-10 md:flex-col md:absolute md:w-36 md:top-full`;
 
   const actions = [
     { title: "React", icon: "M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
@@ -193,12 +186,13 @@ const createActionsMenu = (isCurrentUser) => {
   actions.forEach(action => {
     if (!action.onlyCurrentUser || (action.onlyCurrentUser && isCurrentUser)) {
       const button = document.createElement("button");
-      button.className = `${action.title.toLowerCase()}-btn hover:bg-gray-100 dark:hover:bg-gray-600 p-1.5 rounded transition-colors duration-150`;
+      button.className = `action-btn hover:bg-gray-100 dark:hover:bg-gray-600 p-1.5 rounded transition-colors duration-150 flex items-center space-x-1`;
       button.title = action.title;
       button.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ${action.color || 'text-gray-600 dark:text-gray-300'}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${action.icon}" />
         </svg>
+        <span class="text-xs">${action.title}</span>
       `;
       actionsMenu.appendChild(button);
     }
@@ -208,7 +202,6 @@ const createActionsMenu = (isCurrentUser) => {
 };
 
 const createReactionPicker = () => {
-  alert("Reactions are still in development");
   const picker = document.createElement("div");
   picker.className = "reaction-picker absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 p-2 z-20";
   
