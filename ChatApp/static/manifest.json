@@ -1,50 +1,43 @@
 {
-    "name": "ChannelChat",
-    "short_name": "Chat",
-    "description": "A real-time chat application for seamless communication",
-    "start_url": "/",
-    "display": "standalone",
-    "background_color": "#ffffff",
-    "theme_color": "#4E46DC",
-    "icons": [
-        {
-          "src": "icons/manifest-icon-192.maskable.png",
-          "sizes": "192x192",
-          "type": "image/png",
-          "purpose": "any"
-        },
-        {
-          "src": "icons/manifest-icon-192.maskable.png",
-          "sizes": "192x192",
-          "type": "image/png",
-          "purpose": "maskable"
-        },
-        {
-          "src": "icons/manifest-icon-512.maskable.png",
-          "sizes": "512x512",
-          "type": "image/png",
-          "purpose": "any"
-        },
-        {
-          "src": "icons/manifest-icon-512.maskable.png",
-          "sizes": "512x512",
-          "type": "image/png",
-          "purpose": "maskable"
-        }
-      ],
-    "orientation": "any",
-    "categories": ["social", "communication"],
-    "shortcuts": [
-      {
-        "name": "Recent Chats",
-        "short_name": "Recent",
-        "description": "View recent chats",
-        "url": "/room",
-        "icons": [{ "src": "/static/images/recent-chats-icon.png", "sizes": "1024x1024" }]
-      }
-    ],
-    "related_applications": [],
-    "prefer_related_applications": false,
+  "name": "ChannelChat",
+  "short_name": "Chat",
+  "description": "A real-time chat application for seamless communication",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4E46DC",
+  "lang": "en-US",
+  "orientation": "any",
+  "categories": [
+    "social",
+    "communication"
+  ],
+  "icons": [
+    {
+      "src": "/static/icons/manifest-icon-192.maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/manifest-icon-192.maskable.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/icons/manifest-icon-512.maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/static/icons/manifest-icon-512.maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
   "screenshots": [
     {
       "src": "/static/images/screenshot1.png",
@@ -58,4 +51,4 @@
       "form_factor": "wide"
     }
   ]
-  }
+}

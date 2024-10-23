@@ -2,11 +2,11 @@
 {% block content %}
 <div class="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-700 py-12 px-4 sm:px-6 lg:px-8">
    <div class="max-w-2xl mx-auto">
-      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg overflow-hidden">
-         <div class="px-8 py-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center">
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
+         <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
             <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Account Settings</h1>
             <!-- Dark Mode Toggle -->
-            <button id="darkModeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-600">
+            <button id="darkModeToggle" class="p-2 rounded-full bg-gray-200 dark:bg-gray-600 transition duration-200">
                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-800 dark:text-yellow-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
                </svg>
@@ -19,81 +19,71 @@
                </button>
             </form>
          </div>
-         <div class="px-8 py-6">
+         <div class="px-6 py-4">
             <!-- Tabs -->
-            <div class="tabs mb-4 flex space-x-4">
+            <div class="flex space-x-6 mb-4">
                <button class="tab active" onclick="showTab('profile')">Profile Photo</button>
                <button class="tab" onclick="showTab('username')">New Username</button>
                <button class="tab" onclick="showTab('password')">Password</button>
             </div>
             <!-- Tab Content -->
             <form method="POST" enctype="multipart/form-data" class="space-y-6">
-            <!-- Profile Photo Tab -->
-            <div class="flex items-center space-x-6">
-               <div class="shrink-0">
-                   <img class="h-16 w-16 object-cover rounded-full" 
-                   id="profile-photo" 
-                   src="{{ url_for('profile_photo', username=current_user.username) }}" 
-                   alt="Profile photo" 
-                   onerror="this.onerror=null; this.src='{{ url_for('default_profile') }}';">  
+               <!-- Profile Photo Tab -->
+               <div id="profile" class="tab-content active">
+                  <div class="flex items-center space-x-4">
+                     <img class="h-16 w-16 object-cover rounded-full border-2 border-indigo-500" 
+                          id="profile-photo" 
+                          src="{{ url_for('profile_photo', username=current_user.username) }}" 
+                          alt="Profile photo" 
+                          onerror="this.onerror=null; this.src='{{ url_for('default_profile') }}';">
+                     <div class="flex-1">
+                        <input type="file" name="profile_photo" accept="image/*"
+                               class="block w-full text-sm text-gray-500 dark:text-gray-400
+                               file:mr-4 file:py-2 file:px-4
+                               file:rounded-full file:border-0
+                               file:text-sm file:font-semibold
+                               file:bg-indigo-50 file:text-indigo-700
+                               dark:file:bg-gray-700 dark:file:text-indigo-300
+                               hover:file:bg-indigo-100 dark:hover:file:bg-gray-600">
+                        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">PNG, JPG, GIF up to 5MB</p>
+                     </div>
+                  </div>
                </div>
-               <div class="flex-1">
-                   <input type="file" 
-                          name="profile_photo" 
-                          accept="image/*"
-                          class="block w-full text-sm text-gray-500 dark:text-gray-400
-                          file:mr-4 file:py-2 file:px-4
-                          file:rounded-full file:border-0
-                          file:text-sm file:font-semibold
-                          file:bg-indigo-50 file:text-indigo-700
-                          dark:file:bg-gray-700 dark:file:text-indigo-300
-                          hover:file:bg-indigo-100 dark:hover:file:bg-gray-600">
-                   <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">PNG, JPG, GIF up to 5MB</p>
-               </div>
-           </div>
-           
+
                <!-- New Username Tab -->
                <div id="username" class="tab-content">
-                  <div>
-                     <label for="new_username" class="block text-sm font-medium text-gray-700 dark:text-gray-300">New Username</label>
-                     <div class="mt-1">
-                        <input type="text" name="new_username" id="new_username"
-                           class="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 transition duration-200 dark:bg-gray-700 dark:text-white">
-                     </div>
-                  </div>
+                  <label for="new_username" class="block text-sm font-medium text-gray-700 dark:text-gray-300">New Username</label>
+                  <input type="text" name="new_username" id="new_username"
+                         class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm 
+                                focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 
+                                transition duration-200 dark:bg-gray-700 dark:text-white">
                </div>
+
                <!-- Password Tab -->
                <div id="password" class="tab-content">
-                  <div>
-                     <label for="current_password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Current Password</label>
-                     <div class="mt-1">
-                        <input type="password" name="current_password" id="current_password"
-                           class="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 transition duration-200 dark:bg-gray-700 dark:text-white">
-                     </div>
-                  </div>
-                  <div>
-                     <label for="new_password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">New Password</label>
-                     <div class="mt-1">
-                        <input type="password" name="new_password" id="new_password"
-                           class="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 transition duration-200 dark:bg-gray-700 dark:text-white">
-                     </div>
-                  </div>
-                  <div>
-                     <label for="confirm_new_password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Confirm New Password</label>
-                     <div class="mt-1">
-                        <input type="password" name="confirm_new_password" id="confirm_new_password"
-                           class="block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 transition duration-200 dark:bg-gray-700 dark:text-white">
-                     </div>
-                  </div>
+                  <label for="current_password" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Current Password</label>
+                  <input type="password" name="current_password" id="current_password"
+                         class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm 
+                                focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 
+                                transition duration-200 dark:bg-gray-700 dark:text-white">
+                  <label for="new_password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mt-4">New Password</label>
+                  <input type="password" name="new_password" id="new_password"
+                         class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm 
+                                focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 
+                                transition duration-200 dark:bg-gray-700 dark:text-white">
+                  <label for="confirm_new_password" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mt-4">Confirm New Password</label>
+                  <input type="password" name="confirm_new_password" id="confirm_new_password"
+                         class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm 
+                                focus:border-indigo-500 focus:ring focus:ring-indigo-500 focus:ring-opacity-50 
+                                transition duration-200 dark:bg-gray-700 dark:text-white">
                </div>
-               <div class="flex justify-end space-x-4">
+               <div class="flex justify-end space-x-4 mt-6">
                   <button type="submit"
                      class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-200">
-                  Save Changes
+                     Save Changes
                   </button>
-                  <!-- Back to Home Button -->
                   <a href="{{ url_for('home') }}" class="inline-flex justify-center rounded-md border border-transparent bg-gray-300 dark:bg-gray-600 py-2 px-4 text-sm font-medium text-gray-800 dark:text-gray-200 shadow-sm hover:bg-gray-400 dark:hover:bg-gray-500 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition duration-200">
-                  Back to Home
+                     Back to Home
                   </a>
                </div>
             </form>
@@ -104,24 +94,17 @@
 <!-- JavaScript for Tabs and Dark Mode Toggle -->
 <script>
    function showTab(tabName) {
-      // Hide all tab contents
       const tabs = document.querySelectorAll('.tab-content');
       tabs.forEach(tab => {
          tab.classList.remove('active');
       });
-      
-      // Show the selected tab
       document.getElementById(tabName).classList.add('active');
-   
-      // Remove active class from all tabs
+
       const tabButtons = document.querySelectorAll('.tab');
       tabButtons.forEach(button => {
          button.classList.remove('active');
       });
-   
-      // Set the clicked tab as active
-      const activeTab = Array.from(tabButtons).find(button => button.textContent.trim() === tabName.replace('_', ' '));
-      activeTab.classList.add('active');
+      document.querySelector(`.tab:contains('${tabName}')`).classList.add('active');
    }
 
    // Dark mode toggle functionality
@@ -131,16 +114,9 @@
 
       darkModeToggle.addEventListener('click', () => {
          html.classList.toggle('dark');
-         
-         // Save the current mode to localStorage
-         if (html.classList.contains('dark')) {
-            localStorage.setItem('darkMode', 'dark');
-         } else {
-            localStorage.setItem('darkMode', 'light');
-         }
+         localStorage.setItem('darkMode', html.classList.contains('dark') ? 'dark' : 'light');
       });
 
-      // Check if dark mode was enabled in localStorage
       if (localStorage.getItem('darkMode') === 'dark') {
          html.classList.add('dark');
       }
