@@ -88,7 +88,7 @@ document.addEventListener("visibilitychange", handleVisibilityChange);
 
 const typingIndicator = createTypingIndicator();
 
-const createMessageElement = (name, msg, image, messageId, replyTo) => {
+const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = false) => {
   const isCurrentUser = name === currentUser;
 
   const element = document.createElement("div");
@@ -112,13 +112,28 @@ const createMessageElement = (name, msg, image, messageId, replyTo) => {
   messageBubble.className = `group relative p-3 rounded-2xl shadow-sm max-w-[85%] md:max-w-[70%] transition-shadow duration-200 ${isCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'}`;
   messageBubble.dataset.messageId = messageId;
 
-  // Message content
+  // Message content container with edit indicator
+  const messageContainer = document.createElement("div");
+  messageContainer.className = "flex items-start gap-1";
+  
   const messageContent = document.createElement("div");
   messageContent.className = "message-content leading-relaxed break-words";
   messageContent.textContent = msg || "Sent an image";
-  messageBubble.appendChild(messageContent);
+  
+  // Add edit indicator if message was edited
+  if (isEdited) {
+    const editedIndicator = document.createElement("span");
+    editedIndicator.className = `edited-indicator text-xs ${isCurrentUser ? 'text-white/70' : 'text-gray-500 dark:text-gray-400'}`;
+    editedIndicator.textContent = "(edited)";
+    messageContainer.appendChild(messageContent);
+    messageContainer.appendChild(editedIndicator);
+  } else {
+    messageContainer.appendChild(messageContent);
+  }
+  
+  messageBubble.appendChild(messageContainer);
 
-  // Reply information
+  // Rest of the message elements (reply info, image, actions menu)
   if (replyTo) {
     const replyInfo = document.createElement("div");
     replyInfo.className = `reply-info mt-2 text-sm ${isCurrentUser ? 'text-white/75' : 'text-gray-500 dark:text-gray-400'} pl-3 border-l-2 border-current`;
@@ -127,7 +142,6 @@ const createMessageElement = (name, msg, image, messageId, replyTo) => {
     messageBubble.appendChild(replyInfo);
   }
 
-  // Image
   if (image) {
     const img = document.createElement("img");
     img.src = image;
@@ -136,13 +150,11 @@ const createMessageElement = (name, msg, image, messageId, replyTo) => {
     messageBubble.appendChild(img);
   }
 
-  // Actions menu
   const actionsMenu = createActionsMenu(isCurrentUser);
   messageBubble.appendChild(actionsMenu);
 
   element.appendChild(messageBubble);
 
-  // Add event listeners
   addEventListeners(messageBubble, messageId, msg);
 
   return element;
@@ -403,7 +415,8 @@ socketio.on("message", (data) => {
     data.message, 
     data.image, 
     data.id, 
-    data.reply_to
+    data.reply_to,
+    data.edited || false
   );
   addMessageToDOM(messageElement);
 
@@ -456,7 +469,8 @@ socketio.on("chat_history", (data) => {
       message.message, 
       message.image, 
       message.id, 
-      message.reply_to
+      message.reply_to,
+      message.edited || false
     );
     messageContainer.appendChild(messageElement);
 
@@ -515,7 +529,8 @@ socketio.on("more_messages", (data) => {
       message.message, 
       message.image, 
       message.id, 
-      message.reply_to
+      message.reply_to,
+      message.edited || false
     );
     fragment.appendChild(messageElement);
 
@@ -599,14 +614,22 @@ function loadMoreMessages() {
 socketio.on("edit_message", (data) => {
   const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
   if (messageElement) {
-      const messageContent = messageElement.querySelector('.message-content');
-      if (messageContent) {
-          const isCurrentUser = messageElement.classList.contains('bg-indigo-600');
-          messageContent.className = `message-content ${isCurrentUser ? 'text-white' : 'text-gray-900'}`;
-          messageContent.textContent = data.newText;
-      }
+    const messageContainer = messageElement.querySelector('.message-content').parentElement;
+    const isCurrentUser = messageElement.closest('.message').classList.contains('justify-end');
+    
+    // Update message content
+    const messageContent = messageContainer.querySelector('.message-content');
+    messageContent.textContent = data.newText;
+    
+    // Add edit indicator if not already present
+    if (!messageContainer.querySelector('.edited-indicator')) {
+      const editedIndicator = document.createElement("span");
+      editedIndicator.className = `edited-indicator text-xs ${isCurrentUser ? 'text-white/70' : 'text-gray-500 dark:text-gray-400'}`;
+      editedIndicator.textContent = "(edited)";
+      messageContainer.appendChild(editedIndicator);
+    }
   }
-});
+}); 
   
 socketio.on("delete_message", (data) => {
   const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
