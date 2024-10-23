@@ -1,4 +1,5 @@
 importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.14.1/firebase-messaging-compat.js');
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.4.1/workbox-sw.js');
 
 // Your Firebase configuration
@@ -12,72 +13,17 @@ firebase.initializeApp({
   measurementId: "G-PL15EEFQDE"
 });
 
-// Create caches for profile photos and sent images
-const PROFILE_CACHE = 'profile-photos';
-const USER_SENT_IMAGES_CACHE = 'user-sent-images';
+const messaging = firebase.messaging();
 
-// Custom plugin to handle profile photo cache cleanup
-const profilePhotoCachePlugin = {
-  cacheDidUpdate: async ({cacheName, request, oldResponse, newResponse}) => {
-    if (cacheName === PROFILE_CACHE && oldResponse) {
-      const cache = await caches.open(PROFILE_CACHE);
-      const keys = await cache.keys();
-      const oldProfileUrl = request.url.split('?')[0]; // Remove cache busting parameter
-      
-      // Find and remove old versions of this user's profile photo
-      for (const key of keys) {
-        const keyUrl = key.url.split('?')[0];
-        if (keyUrl === oldProfileUrl && key.url !== request.url) {
-          await cache.delete(key);
-        }
-      }
-    }
-  }
-};
+// Handle background messages
+messaging.onBackgroundMessage(function(payload) {
+  console.log('[firebase-messaging-sw.js] Received background message ', payload);
+  
+  const notificationTitle = payload.notification.title;
+  const notificationOptions = {
+    body: payload.notification.body,
+    icon: '/static/images/chat-icon.png'
+  };
 
-// Cache profile photos
-workbox.routing.registerRoute(
-  ({url}) => url.pathname.includes('profile_'),
-  new workbox.strategies.CacheFirst({
-    cacheName: PROFILE_CACHE,
-    plugins: [
-      profilePhotoCachePlugin,
-      new workbox.cacheableResponse.CacheableResponsePlugin({
-        statuses: [0, 200],
-      }),
-      new workbox.expiration.ExpirationPlugin({
-        maxEntries: 60,
-        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
-      }),
-    ],
-  })
-);
-
-// Cache user-sent images (assuming they are stored under a specific path, e.g., /user-images/)
-workbox.routing.registerRoute(
-  ({url}) => url.pathname.includes('/user-images/'),
-  new workbox.strategies.CacheFirst({
-    cacheName: USER_SENT_IMAGES_CACHE,
-    plugins: [
-      new workbox.cacheableResponse.CacheableResponsePlugin({
-        statuses: [0, 200],
-      }),
-      new workbox.expiration.ExpirationPlugin({
-        maxEntries: 100, // Adjust as needed
-        maxAgeSeconds: 30 * 24 * 60 * 60, // 30 Days
-      }),
-    ],
-  })
-);
-
-// Periodic sync for background updates (if supported)
-self.addEventListener('periodicsync', (event) => {
-  if (event.tag === 'update-cache') {
-    event.waitUntil(updateCache());
-  }
+  self.registration.showNotification(notificationTitle, notificationOptions);
 });
-
-async function updateCache() {
-  // Add logic here to update your cache
-  console.log('Updating cache in the background');
-}
