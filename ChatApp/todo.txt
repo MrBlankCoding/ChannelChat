@@ -1,12 +1,9 @@
 49. GIF API
-50. Message reactions -> fix
 51. Make it so profile photos work on mobile
 51. Make it so you can send images on mobile
 52. Add support for videos
 53. Make images scale
 56. Add a notifcation sound
 57. Make it so it doesnt duplicate notifcations due to mutiple members in a room
-61. sound effect for reactions, replys, images
 62. themed chats
 63. audio messages
-66. UI for edited messages

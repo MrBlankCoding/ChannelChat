@@ -1267,6 +1267,64 @@ def message(data):
                 send_push_notification(user_data["fcm_token"], content)
             else:
                 print(f"FCM token not found for {username}")
+                
+@socketio.on("add_reaction")
+def add_reaction(data):
+    room = session.get("room")
+    username = session.get("username")
+    if not room or not username:
+        return
+
+    # Find the message and its current reactions
+    room_data = rooms_collection.find_one(
+        {
+            "_id": room,
+            "messages.id": data["messageId"]
+        },
+        {"messages.$": 1}
+    )
+    
+    if not room_data or not room_data.get("messages"):
+        return
+
+    message = room_data["messages"][0]
+    reactions = message.get("reactions", {})
+    emoji_data = reactions.get(data["emoji"], {"count": 0, "users": []})
+    
+    # Toggle reaction
+    if username in emoji_data["users"]:
+        # Remove reaction
+        rooms_collection.update_one(
+            {"_id": room, "messages.id": data["messageId"]},
+            {
+                "$pull": {f"messages.$.reactions.{data['emoji']}.users": username},
+                "$inc": {f"messages.$.reactions.{data['emoji']}.count": -1}
+            }
+        )
+    else:
+        # Add reaction
+        rooms_collection.update_one(
+            {"_id": room, "messages.id": data["messageId"]},
+            {
+                "$addToSet": {f"messages.$.reactions.{data['emoji']}.users": username},
+                "$inc": {f"messages.$.reactions.{data['emoji']}.count": 1},
+                "$setOnInsert": {f"messages.$.reactions.{data['emoji']}.emoji": data["emoji"]}
+            },
+            upsert=True
+        )
+
+    # Get updated message data
+    updated_room = rooms_collection.find_one(
+        {"_id": room, "messages.id": data["messageId"]},
+        {"messages.$": 1}
+    )
+    
+    if updated_room and updated_room.get("messages"):
+        updated_message = updated_room["messages"][0]
+        socketio.emit("update_reactions", {
+            "messageId": data["messageId"],
+            "reactions": updated_message.get("reactions", {})
+        }, room=room)
 
                 
 @app.route("/get_unread_messages")
@@ -1379,39 +1437,6 @@ def edit_message(data):
             "messageId": data["messageId"],
             "newText": data["newText"]
         }, room=room)
-
-@socketio.on("add_reaction")
-def add_reaction(data):
-    room = session.get("room")
-    name = session.get("name")
-    if not room:
-        return
-
-    # Update message reactions in MongoDB
-    result = rooms_collection.update_one(
-        {
-            "_id": room,
-            "messages.id": data["messageId"]
-        },
-        {
-            "$inc": {
-                f"messages.$.reactions.{data['emoji']}": 1
-            }
-        }
-    )
-    
-    if result.modified_count:
-        # Get updated message data
-        room_data = rooms_collection.find_one(
-            {"_id": room},
-            {"messages": {"$elemMatch": {"id": data["messageId"]}}}
-        )
-        if room_data and room_data.get("messages"):
-            message = room_data["messages"][0]
-            socketio.emit("update_reactions", {
-                "messageId": data["messageId"],
-                "reactions": message.get("reactions", {})
-            }, room=room)
 
 @socketio.on("delete_message")
 def delete_message(data):

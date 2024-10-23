@@ -133,7 +133,12 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
   
   messageBubble.appendChild(messageContainer);
 
-  // Rest of the message elements (reply info, image, actions menu)
+  // Add reactions container
+  const reactionsContainer = document.createElement("div");
+  reactionsContainer.className = "reactions-container flex flex-wrap gap-1 mt-1";
+  messageBubble.appendChild(reactionsContainer);
+
+  // Rest of the message elements (reply info, image)
   if (replyTo) {
     const replyInfo = document.createElement("div");
     replyInfo.className = `reply-info mt-2 text-sm ${isCurrentUser ? 'text-white/75' : 'text-gray-500 dark:text-gray-400'} pl-3 border-l-2 border-current`;
@@ -166,6 +171,7 @@ const createActionsMenu = (isCurrentUser) => {
     flex items-center space-x-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg px-2 py-1 transition-opacity duration-200 z-10`;
 
   const actions = [
+    { title: "React", icon: "M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
     { title: "Reply", icon: "M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" },
     { title: "Edit", icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z", onlyCurrentUser: true },
     { title: "Delete", icon: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16", onlyCurrentUser: true, color: "text-red-600" }
@@ -188,10 +194,37 @@ const createActionsMenu = (isCurrentUser) => {
   return actionsMenu;
 };
 
+const createReactionPicker = () => {
+  const picker = document.createElement("div");
+  picker.className = "reaction-picker absolute bottom-full mb-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 p-2 z-20";
+  
+  const commonEmojis = ['👍', '❤️', '😊', '🎉', '🤔', '👀', '🙌', '🔥'];
+  
+  const emojiContainer = document.createElement("div");
+  emojiContainer.className = "flex space-x-1";
+  
+  commonEmojis.forEach(emoji => {
+    const button = document.createElement("button");
+    button.className = "hover:bg-gray-100 dark:hover:bg-gray-700 p-1.5 rounded-lg transition-colors duration-150";
+    button.textContent = emoji;
+    button.onclick = () => {
+      const messageId = picker.closest('[data-message-id]').dataset.messageId;
+      socketio.emit('add_reaction', { messageId, emoji });
+      picker.remove();
+    };
+    emojiContainer.appendChild(button);
+  });
+  
+  picker.appendChild(emojiContainer);
+  return picker;
+};
+
+
 const addEventListeners = (messageBubble, messageId, msg) => {
   const replyBtn = messageBubble.querySelector('button[title="Reply"]');
   const editBtn = messageBubble.querySelector('button[title="Edit"]');
   const deleteBtn = messageBubble.querySelector('button[title="Delete"]');
+  const reactBtn = messageBubble.querySelector('button[title="React"]');
 
   if (replyBtn) {
     replyBtn.addEventListener('click', () => startReply(messageId, msg));
@@ -203,6 +236,25 @@ const addEventListeners = (messageBubble, messageId, msg) => {
 
   if (deleteBtn) {
     deleteBtn.addEventListener('click', () => deleteMessage(messageId));
+  }
+
+  if (reactBtn) {
+    reactBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      // Remove any existing reaction pickers
+      document.querySelectorAll('.reaction-picker').forEach(picker => picker.remove());
+      const picker = createReactionPicker();
+      messageBubble.appendChild(picker);
+      
+      // Close picker when clicking outside
+      const closePickerOnClickOutside = (e) => {
+        if (!picker.contains(e.target) && !reactBtn.contains(e.target)) {
+          picker.remove();
+          document.removeEventListener('click', closePickerOnClickOutside);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', closePickerOnClickOutside), 0);
+    });
   }
 };
 
@@ -365,6 +417,38 @@ messageInput.addEventListener("keyup", (event) => {
       socketio.emit("typing", { isTyping: false });
     }, TYPING_TIMEOUT);
   }
+});
+
+const createReactionElement = (emoji, count, isSelected) => {
+  const reaction = document.createElement("button");
+  reaction.className = `inline-flex items-center space-x-1 text-sm rounded-full px-2 py-1 transition-all duration-200 ${
+    isSelected 
+      ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300' 
+      : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+  }`;
+  reaction.innerHTML = `
+    <span>${emoji}</span>
+    ${count > 0 ? `<span class="text-xs">${count}</span>` : ''}
+  `;
+  return reaction;
+};
+
+// Update reactions when receiving socket event
+socketio.on('update_reactions', (data) => {
+  const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
+  if (!messageElement) return;
+
+  const reactionsContainer = messageElement.querySelector('.reactions-container');
+  reactionsContainer.innerHTML = '';
+
+  Object.entries(data.reactions).forEach(([emoji, reactionData]) => {
+    const isSelected = reactionData.users.includes(currentUser);
+    const reactionElement = createReactionElement(emoji, reactionData.count, isSelected);
+    reactionElement.onclick = () => {
+      socketio.emit('add_reaction', { messageId: data.messageId, emoji });
+    };
+    reactionsContainer.appendChild(reactionElement);
+  });
 });
 
 imageUpload.addEventListener('change', (event) => {
