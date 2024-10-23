@@ -9,7 +9,7 @@ from string import ascii_uppercase
 
 # Third-party library imports
 from flask import Flask, render_template, request, session, redirect, url_for, send_from_directory, flash, jsonify
-from flask_socketio import join_room, leave_room, send, SocketIO
+from flask_socketio import join_room, leave_room, send, emit, SocketIO
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from firebase_admin import credentials, messaging, storage
 import firebase_admin
@@ -1270,62 +1270,81 @@ def message(data):
                 
 @socketio.on("add_reaction")
 def add_reaction(data):
+    print("received reaction")
     room = session.get("room")
     username = session.get("username")
     if not room or not username:
         return
 
+    message_id = data["messageId"]
+    emoji = data["emoji"]
+
     # Find the message and its current reactions
     room_data = rooms_collection.find_one(
-        {
-            "_id": room,
-            "messages.id": data["messageId"]
-        },
-        {"messages.$": 1}
+        {"_id": room, "messages.id": message_id}
     )
     
-    if not room_data or not room_data.get("messages"):
+    if not room_data:
         return
 
-    message = room_data["messages"][0]
-    reactions = message.get("reactions", {})
-    emoji_data = reactions.get(data["emoji"], {"count": 0, "users": []})
+    # Find the specific message
+    message = next((msg for msg in room_data["messages"] if msg["id"] == message_id), None)
+    if not message:
+        return
+
+    # Initialize reactions if they don't exist
+    current_reactions = message.get("reactions", {})
+    emoji_data = current_reactions.get(emoji, {"count": 0, "users": []})
     
     # Toggle reaction
     if username in emoji_data["users"]:
         # Remove reaction
-        rooms_collection.update_one(
-            {"_id": room, "messages.id": data["messageId"]},
-            {
-                "$pull": {f"messages.$.reactions.{data['emoji']}.users": username},
-                "$inc": {f"messages.$.reactions.{data['emoji']}.count": -1}
+        update_query = {
+            "$pull": {f"messages.$[msg].reactions.{emoji}.users": username}
+        }
+        
+        # If this was the last user, remove the entire emoji entry
+        if len(emoji_data["users"]) == 1:
+            update_query = {
+                "$unset": {f"messages.$[msg].reactions.{emoji}": ""}
             }
+        else:
+            update_query["$inc"] = {f"messages.$[msg].reactions.{emoji}.count": -1}
+        
+        rooms_collection.update_one(
+            {"_id": room},
+            update_query,
+            array_filters=[{"msg.id": message_id}]
         )
     else:
         # Add reaction
+        update_query = {
+            "$set": {
+                f"messages.$[msg].reactions.{emoji}": {
+                    "count": emoji_data["count"] + 1,
+                    "users": emoji_data["users"] + [username]
+                }
+            }
+        }
+        
         rooms_collection.update_one(
-            {"_id": room, "messages.id": data["messageId"]},
-            {
-                "$addToSet": {f"messages.$.reactions.{data['emoji']}.users": username},
-                "$inc": {f"messages.$.reactions.{data['emoji']}.count": 1},
-                "$setOnInsert": {f"messages.$.reactions.{data['emoji']}.emoji": data["emoji"]}
-            },
-            upsert=True
+            {"_id": room},
+            update_query,
+            array_filters=[{"msg.id": message_id}]
         )
 
     # Get updated message data
     updated_room = rooms_collection.find_one(
-        {"_id": room, "messages.id": data["messageId"]},
-        {"messages.$": 1}
+        {"_id": room, "messages.id": message_id}
     )
     
-    if updated_room and updated_room.get("messages"):
-        updated_message = updated_room["messages"][0]
-        socketio.emit("update_reactions", {
-            "messageId": data["messageId"],
-            "reactions": updated_message.get("reactions", {})
-        }, room=room)
-
+    if updated_room:
+        updated_message = next((msg for msg in updated_room["messages"] if msg["id"] == message_id), None)
+        if updated_message:
+            emit("update_reactions", {
+                "messageId": message_id,
+                "reactions": updated_message.get("reactions", {})
+            }, room=room)
                 
 @app.route("/get_unread_messages")
 @login_required

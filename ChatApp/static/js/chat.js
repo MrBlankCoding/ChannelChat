@@ -88,7 +88,7 @@ document.addEventListener("visibilitychange", handleVisibilityChange);
 
 const typingIndicator = createTypingIndicator();
 
-const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = false) => {
+const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = false, reactions = {}) => {
   const isCurrentUser = name === currentUser;
 
   const element = document.createElement("div");
@@ -112,14 +112,13 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
   messageBubble.className = `group relative p-3 rounded-2xl shadow-sm max-w-[85%] md:max-w-[70%] transition-shadow duration-200 ${isCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'}`;
   messageBubble.dataset.messageId = messageId;
 
-  // Message content container with edit indicator
   const messageContainer = document.createElement("div");
   messageContainer.className = "flex items-start gap-1";
   
   const messageContent = document.createElement("div");
   messageContent.className = "message-content leading-relaxed break-words";
   messageContent.textContent = msg || "Sent an image";
-  
+
   // Add edit indicator if message was edited
   if (isEdited) {
     const editedIndicator = document.createElement("span");
@@ -130,15 +129,26 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
   } else {
     messageContainer.appendChild(messageContent);
   }
-  
+
   messageBubble.appendChild(messageContainer);
 
-  // Add reactions container
+  // Reactions container
   const reactionsContainer = document.createElement("div");
   reactionsContainer.className = "reactions-container flex flex-wrap gap-1 mt-1";
+  
+  // Populate existing reactions
+  if (Object.keys(reactions).length > 0) {
+    Object.entries(reactions).forEach(([emoji, reactionData]) => {
+      if (reactionData.count > 0) {
+        const reactionElement = createReactionElement(emoji, reactionData, messageId);
+        reactionsContainer.appendChild(reactionElement);
+      }
+    });
+  }
+  
   messageBubble.appendChild(reactionsContainer);
 
-  // Rest of the message elements (reply info, image)
+  // Reply information if applicable
   if (replyTo) {
     const replyInfo = document.createElement("div");
     replyInfo.className = `reply-info mt-2 text-sm ${isCurrentUser ? 'text-white/75' : 'text-gray-500 dark:text-gray-400'} pl-3 border-l-2 border-current`;
@@ -147,6 +157,7 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
     messageBubble.appendChild(replyInfo);
   }
 
+  // Add image if present
   if (image) {
     const img = document.createElement("img");
     img.src = image;
@@ -155,11 +166,13 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
     messageBubble.appendChild(img);
   }
 
+  // Add actions menu
   const actionsMenu = createActionsMenu(isCurrentUser);
   messageBubble.appendChild(actionsMenu);
 
   element.appendChild(messageBubble);
 
+  // Add event listeners (e.g., click, hover, etc.)
   addEventListeners(messageBubble, messageId, msg);
 
   return element;
@@ -195,8 +208,9 @@ const createActionsMenu = (isCurrentUser) => {
 };
 
 const createReactionPicker = () => {
+  alert("Reactions are still in development");
   const picker = document.createElement("div");
-  picker.className = "reaction-picker absolute bottom-full mb-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 p-2 z-20";
+  picker.className = "reaction-picker absolute bottom-full left-0 mb-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 p-2 z-20";
   
   const commonEmojis = ['👍', '❤️', '😊', '🎉', '🤔', '👀', '🙌', '🔥'];
   
@@ -207,7 +221,8 @@ const createReactionPicker = () => {
     const button = document.createElement("button");
     button.className = "hover:bg-gray-100 dark:hover:bg-gray-700 p-1.5 rounded-lg transition-colors duration-150";
     button.textContent = emoji;
-    button.onclick = () => {
+    button.onclick = (e) => {
+      e.stopPropagation();
       const messageId = picker.closest('[data-message-id]').dataset.messageId;
       socketio.emit('add_reaction', { messageId, emoji });
       picker.remove();
@@ -218,7 +233,6 @@ const createReactionPicker = () => {
   picker.appendChild(emojiContainer);
   return picker;
 };
-
 
 const addEventListeners = (messageBubble, messageId, msg) => {
   const replyBtn = messageBubble.querySelector('button[title="Reply"]');
@@ -315,7 +329,22 @@ const addReaction = (messageId, emoji) => {
 };
 
 socketio.on('update_reactions', (data) => {
-  updateReactions(data.messageId, data.reactions);
+  const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
+  if (!messageElement) return;
+
+  const reactionsContainer = messageElement.querySelector('.reactions-container');
+  if (!reactionsContainer) return;
+
+  // Clear existing reactions
+  reactionsContainer.innerHTML = '';
+
+  // Add updated reactions
+  Object.entries(data.reactions).forEach(([emoji, reactionData]) => {
+    if (reactionData.count > 0) {
+      const reactionElement = createReactionElement(emoji, reactionData, data.messageId);
+      reactionsContainer.appendChild(reactionElement);
+    }
+  });
 });
 
 const editMessage = (messageId) => {
@@ -419,19 +448,48 @@ messageInput.addEventListener("keyup", (event) => {
   }
 });
 
-const createReactionElement = (emoji, count, isSelected) => {
+const createReactionElement = (emoji, reactionData, messageId) => {
   const reaction = document.createElement("button");
+  const isSelected = reactionData.users && reactionData.users.includes(currentUser);
+  
   reaction.className = `inline-flex items-center space-x-1 text-sm rounded-full px-2 py-1 transition-all duration-200 ${
     isSelected 
       ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300' 
       : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
   }`;
+  
   reaction.innerHTML = `
     <span>${emoji}</span>
-    ${count > 0 ? `<span class="text-xs">${count}</span>` : ''}
+    <span class="text-xs">${reactionData.count}</span>
   `;
+  
+  reaction.onclick = (e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    socketio.emit('add_reaction', { messageId, emoji });
+  };
+  
   return reaction;
 };
+
+socketio.on('update_reactions', (data) => {
+  const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
+  if (!messageElement) return;
+
+  const reactionsContainer = messageElement.querySelector('.reactions-container');
+  if (!reactionsContainer) return;
+
+  // Clear existing reactions
+  reactionsContainer.innerHTML = '';
+
+  // Add updated reactions
+  Object.entries(data.reactions).forEach(([emoji, reactionData]) => {
+    if (reactionData.count > 0) {
+      const reactionElement = createReactionElement(emoji, reactionData, data.messageId);
+      reactionsContainer.appendChild(reactionElement);
+    }
+  });
+});
 
 // Update reactions when receiving socket event
 socketio.on('update_reactions', (data) => {
@@ -500,7 +558,8 @@ socketio.on("message", (data) => {
     data.image, 
     data.id, 
     data.reply_to,
-    data.edited || false
+    data.edited || false,
+    data.reactions || {}
   );
   addMessageToDOM(messageElement);
 
@@ -554,7 +613,8 @@ socketio.on("chat_history", (data) => {
       message.image, 
       message.id, 
       message.reply_to,
-      message.edited || false
+      message.edited || false,
+      message.reactions || {}
     );
     messageContainer.appendChild(messageElement);
 
