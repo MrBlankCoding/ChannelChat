@@ -88,19 +88,22 @@ document.addEventListener("visibilitychange", handleVisibilityChange);
 
 const typingIndicator = createTypingIndicator();
 
-const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = false, reactions = {}) => {
+const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = false, reactions = {}, readBy = []) => {
   const isCurrentUser = name === currentUser;
+  // Check if message has been read by others (excluding the sender)
+  const isRead = readBy.some(reader => reader !== null && reader !== currentUser);
 
   const element = document.createElement("div");
-  element.className = `message flex ${isCurrentUser ? 'justify-end' : 'justify-start'} items-start space-x-2`;
+  element.className = `message group flex ${isCurrentUser ? 'justify-end' : 'justify-start'} items-start space-x-3 px-4 py-2 hover:bg-gray-50/5 transition-colors duration-200`;
 
+  // Profile photo section
   if (!isCurrentUser) {
     const profilePhotoContainer = document.createElement("div");
     profilePhotoContainer.className = "flex-shrink-0";
     const profilePhoto = document.createElement("img");
     profilePhoto.src = `/profile_photos/${name}`;
     profilePhoto.alt = `${name}'s profile`;
-    profilePhoto.className = "w-8 h-8 rounded-full object-cover";
+    profilePhoto.className = "w-8 h-8 rounded-full object-cover ring-2 ring-white dark:ring-gray-800 shadow-sm";
     profilePhoto.onerror = function() {
       this.src = '/static/images/default-profile.png';
     };
@@ -108,36 +111,74 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
     element.appendChild(profilePhotoContainer);
   }
 
+  const messageContainer = document.createElement("div");
+  messageContainer.className = "relative max-w-[80%]";
+
+  // Message header with name and time
+  const messageHeader = document.createElement("div");
+  messageHeader.className = `flex items-center gap-2 mb-1 ${isCurrentUser ? 'justify-end' : 'justify-start'}`;
+  
+  if (!isCurrentUser) {
+    const nameSpan = document.createElement("span");
+    nameSpan.className = "text-sm font-medium text-gray-700 dark:text-gray-300";
+    nameSpan.textContent = name;
+    messageHeader.appendChild(nameSpan);
+  }
+  
+  messageContainer.appendChild(messageHeader);
+
+  // Message bubble
   const messageBubble = document.createElement("div");
-  messageBubble.className = `group relative p-4 rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 ${isCurrentUser ? 'bg-blue-500 text-white border border-blue-600' : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-300 dark:border-gray-600'}`;
+  messageBubble.className = `relative p-3 rounded-lg shadow-sm transition-all duration-200 ${
+    isCurrentUser 
+      ? 'bg-blue-500 text-white' 
+      : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white'
+  }`;
   messageBubble.dataset.messageId = messageId;
 
-  // Add the read message class here
-  if (messageElement.classList.contains('read-message')) {
-    messageBubble.classList.add('bg-purple-200'); // Change this to a color that indicates read status
+  // Add read status styling only for current user's messages that have been read
+  if (isCurrentUser && isRead) {
+    messageBubble.classList.add('ring-2', 'ring-purple-400', 'dark:ring-purple-500');
   }
 
-  const messageContainer = document.createElement("div");
-  messageContainer.className = "flex items-start gap-1";
+  if (replyTo) {
+    const replyInfo = document.createElement("div");
+    replyInfo.className = `mb-2 text-sm rounded px-3 py-1 border-l-2 ${
+      isCurrentUser
+        ? 'bg-blue-600/50 border-blue-300'
+        : 'bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-500'
+    }`;
+    replyInfo.dataset.replyTo = replyTo.id;
+    replyInfo.innerHTML = `<span class="opacity-75">Replying to:</span> ${replyTo.message}`;
+    messageBubble.appendChild(replyInfo);
+  }
 
+  // Message content
   const messageContent = document.createElement("div");
-  messageContent.className = "message-content leading-relaxed break-words text-base font-medium";
+  messageContent.className = "message-content break-words";
   messageContent.textContent = msg || "Sent an image";
 
   if (isEdited) {
     const editedIndicator = document.createElement("span");
-    editedIndicator.className = `edited-indicator text-xs ${isCurrentUser ? 'text-white/70' : 'text-gray-500 dark:text-gray-400'}`;
+    editedIndicator.className = "ml-2 text-xs opacity-75";
     editedIndicator.textContent = "(edited)";
-    messageContainer.appendChild(messageContent);
-    messageContainer.appendChild(editedIndicator);
-  } else {
-    messageContainer.appendChild(messageContent);
+    messageContent.appendChild(editedIndicator);
   }
 
-  messageBubble.appendChild(messageContainer);
+  messageBubble.appendChild(messageContent);
 
+  // Image handling
+  if (image) {
+    const img = document.createElement("img");
+    img.src = image;
+    img.alt = "Uploaded image";
+    img.className = "mt-2 max-w-full rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200";
+    messageBubble.appendChild(img);
+  }
+
+  // Reactions display
   const reactionsContainer = document.createElement("div");
-  reactionsContainer.className = "reactions-container flex flex-wrap gap-1 mt-1";
+  reactionsContainer.className = "flex flex-wrap gap-1 mt-2";
   
   if (Object.keys(reactions).length > 0) {
     Object.entries(reactions).forEach(([emoji, reactionData]) => {
@@ -150,63 +191,80 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
   
   messageBubble.appendChild(reactionsContainer);
 
-  if (replyTo) {
-    const replyInfo = document.createElement("div");
-    replyInfo.className = `reply-info mt-2 text-sm ${isCurrentUser ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-900'} pl-3 border-l-2 border-current p-2 rounded-md`;
-    replyInfo.dataset.replyTo = replyTo.id;
-    replyInfo.innerHTML = `Replying to: <span class="replied-message italic">${replyTo.message}</span>`;
-    messageBubble.appendChild(replyInfo);
-  }
-
-  if (image) {
-    const img = document.createElement("img");
-    img.src = image;
-    img.alt = "Uploaded image";
-    img.className = "mt-2 max-w-full rounded-lg border border-gray-300 shadow-sm";
-    messageBubble.appendChild(img);
-  }
-
+  // Actions menu
   const actionsMenu = createActionsMenu(isCurrentUser);
   messageBubble.appendChild(actionsMenu);
 
-  element.appendChild(messageBubble);
+  messageContainer.appendChild(messageBubble);
+  element.appendChild(messageContainer);
 
   addEventListeners(messageBubble, messageId, msg);
 
   return element;
 };
 
-// CSS styles
-const styles = `
-  .read-message {
-    background-color: #E0E7FF; /* Light purple background */
-    border: 2px solid #4E46DC; /* Purple border for read messages */
-  }
-`;
-document.head.insertAdjacentHTML('beforeend', `<style>${styles}</style>`);
+const createReactionElement = (emoji, reactionData, messageId) => {
+  const element = document.createElement("button");
+  element.className = `flex items-center space-x-1 text-xs rounded-full px-2 py-0.5 transition-colors ${
+    reactionData.users.includes(currentUser)
+      ? 'bg-gray-200 dark:bg-gray-700'
+      : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700'
+  }`;
+  
+  element.onclick = () => socketio.emit('toggle_reaction', { messageId, emoji });
+  
+  const emojiSpan = document.createElement("span");
+  emojiSpan.textContent = emoji;
+  
+  const countSpan = document.createElement("span");
+  countSpan.textContent = reactionData.count;
+  
+  element.appendChild(emojiSpan);
+  element.appendChild(countSpan);
+  
+  return element;
+};
 
 const createActionsMenu = (isCurrentUser) => {
   const actionsMenu = document.createElement("div");
-  actionsMenu.className = `actions-menu opacity-0 group-hover:opacity-100 absolute -top-8 ${isCurrentUser ? 'right-0' : 'left-0'} 
-    flex items-center space-x-2 bg-white dark:bg-gray-800 shadow-lg rounded-lg px-2 py-1 transition-opacity duration-200 z-10 md:flex-col md:absolute md:w-36 md:top-full`;
+  actionsMenu.className = `actions-menu opacity-0 group-hover:opacity-100 absolute -top-8 ${
+    isCurrentUser ? 'right-0' : 'left-0'
+  } flex items-center space-x-1 bg-white dark:bg-gray-800 shadow-lg rounded-lg p-1 transition-all duration-200 z-10`;
 
   const actions = [
-    { title: "React", icon: "M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" },
-    { title: "Reply", icon: "M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" },
-    { title: "Edit", icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z", onlyCurrentUser: true },
-    { title: "Delete", icon: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16", onlyCurrentUser: true, color: "text-red-600" }
+    { 
+      title: "React", 
+      icon: "M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z",
+      className: "hover:bg-gray-100 dark:hover:bg-gray-700"
+    },
+    { 
+      title: "Reply", 
+      icon: "M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6",
+      className: "hover:bg-gray-100 dark:hover:bg-gray-700"
+    },
+    { 
+      title: "Edit", 
+      icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z",
+      onlyCurrentUser: true,
+      className: "hover:bg-gray-100 dark:hover:bg-gray-700"
+    },
+    { 
+      title: "Delete", 
+      icon: "M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16",
+      onlyCurrentUser: true,
+      className: "hover:bg-red-100 dark:hover:bg-red-900 text-red-600"
+    }
   ];
 
   actions.forEach(action => {
     if (!action.onlyCurrentUser || (action.onlyCurrentUser && isCurrentUser)) {
       const button = document.createElement("button");
-      button.className = `action-btn hover:bg-gray-100 dark:hover:bg-gray-600 p-1.5 rounded transition-colors duration-150 flex items-center space-x-1`;
+      button.className = `action-btn p-1.5 rounded transition-colors duration-150 ${action.className}`;
       button.title = action.title;
       button.innerHTML = `
-        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ${action.color || 'text-gray-600 dark:text-gray-300'}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${action.icon}" />
         </svg>
-        <span class="text-xs">${action.title}</span>
       `;
       actionsMenu.appendChild(button);
     }
@@ -214,6 +272,67 @@ const createActionsMenu = (isCurrentUser) => {
 
   return actionsMenu;
 };
+
+// Updated styles
+const styles = `
+  .message {
+    transition: background-color 0.2s ease;
+  }
+  
+  .message:hover {
+    background-color: rgba(0, 0, 0, 0.02);
+  }
+
+  .dark .message:hover {
+    background-color: rgba(255, 255, 255, 0.02);
+  }
+
+  .message-content img {
+    border-radius: 0.5rem;
+    max-width: 100%;
+    height: auto;
+  }
+
+  .actions-menu {
+    transform: translateY(-0.5rem);
+    pointer-events: none;
+  }
+
+  .message:hover .actions-menu {
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+
+  .action-btn svg {
+    transition: transform 0.2s ease;
+  }
+
+  .action-btn:hover svg {
+    transform: scale(1.1);
+  }
+
+  .read-message {
+    position: relative;
+  }
+
+  .read-message::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    right: -2px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: rgb(167, 139, 250);
+    border: 2px solid white;
+  }
+
+  .dark .read-message::after {
+    border-color: rgb(17, 24, 39);
+  }
+`;
+
+document.head.insertAdjacentHTML('beforeend', `<style>${styles}</style>`);
 
 const createReactionPicker = () => {
   const picker = document.createElement("div");
@@ -454,30 +573,6 @@ messageInput.addEventListener("keyup", (event) => {
     }, TYPING_TIMEOUT);
   }
 });
-
-const createReactionElement = (emoji, reactionData, messageId) => {
-  const reaction = document.createElement("button");
-  const isSelected = reactionData.users && reactionData.users.includes(currentUser);
-  
-  reaction.className = `inline-flex items-center space-x-1 text-sm rounded-full px-2 py-1 transition-all duration-200 ${
-    isSelected 
-      ? 'bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-300' 
-      : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
-  }`;
-  
-  reaction.innerHTML = `
-    <span>${emoji}</span>
-    <span class="text-xs">${reactionData.count}</span>
-  `;
-  
-  reaction.onclick = (e) => {
-    e.stopPropagation();
-    e.preventDefault();
-    socketio.emit('add_reaction', { messageId, emoji });
-  };
-  
-  return reaction;
-};
 
 socketio.on('update_reactions', (data) => {
   const messageElement = document.querySelector(`[data-message-id="${data.messageId}"]`);
