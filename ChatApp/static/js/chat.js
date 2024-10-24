@@ -1,3 +1,29 @@
+// Import the Firebase SDK
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { 
+  getStorage, 
+  ref, 
+  uploadBytesResumable, 
+  getDownloadURL 
+} from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js';
+
+// Your Firebase configuration (replace with your actual values)
+const firebaseConfig = {
+  apiKey: "AIzaSyCjJzQGCZ0niMD5tek_0gLSBGJXxW0VLKA",
+  authDomain: "channelchat-7d679.firebaseapp.com",
+  projectId: "channelchat-7d679",
+  storageBucket: "channelchat-7d679.appspot.com",
+  messagingSenderId: "822894243205",
+  appId: "1:822894243205:web:e129bcac94601e183e68ec",
+  measurementId: "G-PL15EEFQDE"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
+
+// Get a reference to the storage service
+const storage = getStorage(app);
+
 // Constants and DOM elements
 const TYPING_TIMEOUT = 1000;
 const messages = document.getElementById("messages");
@@ -170,9 +196,22 @@ const createMessageElement = (name, msg, image, messageId, replyTo, isEdited = f
   // Image handling
   if (image) {
     const img = document.createElement("img");
-    img.src = image;
+    img.src = image; // Now using Firebase Storage URL directly
     img.alt = "Uploaded image";
-    img.className = "mt-2 max-w-full rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200";
+    img.className = "mt-2 max-w-[150px] rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200"; // Set max width to 150px
+    
+    // Add loading state
+    img.classList.add('opacity-50');
+    img.onload = () => {
+      img.classList.remove('opacity-50');
+    };
+    
+    // Add error handling
+    img.onerror = () => {
+      img.src = '/static/images/image-error.png'; // Fallback image
+      img.classList.remove('opacity-50');
+    };
+    
     messageBubble.appendChild(img);
   }
 
@@ -277,6 +316,14 @@ const createActionsMenu = (isCurrentUser) => {
 const styles = `
   .message {
     transition: background-color 0.2s ease;
+  }
+  
+  .upload-progress {
+    transition: width 0.3s ease-in-out;
+  }
+  
+  img.opacity-50 {
+    filter: brightness(0.8);
   }
   
   .message:hover {
@@ -611,14 +658,56 @@ socketio.on('update_reactions', (data) => {
   });
 });
 
-imageUpload.addEventListener('change', (event) => {
+imageUpload.addEventListener('change', async (event) => {
   const file = event.target.files[0];
   if (file) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      socketio.emit("message", { data: "Sent an image", image: e.target.result });
-    };
-    reader.readAsDataURL(file);
+    try {
+      // Create a storage reference with a unique filename
+      const storageRef = ref(storage, `chat-images/${Date.now()}_${file.name}`);
+      
+      // Show upload progress
+      const progressIndicator = document.createElement('div');
+      progressIndicator.className = 'upload-progress bg-gray-200 rounded-full h-2 mx-4 mb-4';
+      progressIndicator.innerHTML = '<div class="bg-blue-600 h-2 rounded-full" style="width: 0%"></div>';
+      messages.insertAdjacentElement('beforeend', progressIndicator);
+      
+      // Upload file with progress tracking
+      const uploadTask = uploadBytesResumable(storageRef, file);
+      
+      // Monitor upload progress
+      uploadTask.on('state_changed',
+        (snapshot) => {
+          const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+          progressIndicator.querySelector('div').style.width = progress + '%';
+        },
+        (error) => {
+          console.error("Upload failed:", error);
+          progressIndicator.remove();
+          alert('Failed to upload image. Please try again.');
+        },
+        async () => {
+          try {
+            // Get the download URL
+            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+            
+            // Remove progress indicator
+            progressIndicator.remove();
+            
+            // Emit socket event with the image URL
+            socketio.emit("message", {
+              data: "Sent an image",
+              image: downloadURL
+            });
+          } catch (error) {
+            console.error("Error getting download URL:", error);
+            alert('Failed to get image URL. Please try again.');
+          }
+        }
+      );
+    } catch (error) {
+      console.error("Error handling file upload:", error);
+      alert('Failed to process image. Please try again.');
+    }
   }
 });
 

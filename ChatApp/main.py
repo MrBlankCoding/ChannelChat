@@ -1235,19 +1235,9 @@ def message(data):
         "name": session.get("name"),
         "message": data["data"],
         "reply_to": data.get("replyTo"),
-        "read_by": [session.get("username")],  # Initialize with the sender
+        "read_by": [session.get("username")],
+        "image": data.get("image")  # Now just storing the Firebase URL
     }
-    
-    if "image" in data:
-        try:
-            image_data = base64.b64decode(data["image"].split(",")[1])
-            filename = f"{room}_{random.randint(1000, 9999)}.png"
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            with open(filepath, "wb") as f:
-                f.write(image_data)
-            content["image"] = url_for('uploaded_file', filename=filename, _external=True)
-        except Exception as e:
-            content["message"] = "Failed to upload image"
     
     rooms_collection.update_one(
         {"_id": room},
@@ -1486,10 +1476,6 @@ def handle_typing(data):
     if room:
         name = session.get("name")
         socketio.emit("typing", {"name": name, "isTyping": data.get("isTyping", False)}, room=room, include_self=False)
-
-@app.route('/uploads/<filename>')
-def uploaded_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 @app.teardown_appcontext
 def shutdown_scheduler(exception=None):

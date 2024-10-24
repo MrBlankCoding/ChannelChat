@@ -180,5 +180,5 @@
     document.getElementById('invite-modal').classList.remove('flex');
   }
 </script>
-<script src="{{ url_for('static', filename='js/chat.js') }}"></script>
+<script type="module" defer src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endblock %}
