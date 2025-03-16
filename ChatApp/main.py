@@ -1,8 +1,12 @@
 # Standard library imports
 import asyncio
 import logging
+import sys
 import os
 from contextlib import asynccontextmanager
+
+# Add this line to include the ChatApp directory in the Python path
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
 import pymongo
 import sentry_sdk

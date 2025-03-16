@@ -6,7 +6,8 @@ from typing import Dict, Optional, AsyncGenerator
 import pymongo
 from motor.motor_asyncio import AsyncIOMotorClient
 
-from ChatApp.main import settings
+from ChatApp.settings import Settings
+settings = Settings()
 
 
 class ConnectionPool:
