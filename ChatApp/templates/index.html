@@ -1,0 +1,78 @@
+{% extends 'base.html' %}
+
+{% block content %}
+    <script src="https://cdn.jsdelivr.net/npm/particles.js"></script>
+    <style>
+        #particles-js {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #0a0a0a;
+            z-index: -1;
+        }
+    </style>
+
+    <!-- Particles Background -->
+    <div id="particles-js"></div>
+
+    <div class="min-h-screen flex flex-col justify-center items-center text-white relative z-10 px-4">
+        <h1 class="text-5xl md:text-6xl font-extrabold mb-6 text-center drop-shadow-lg">Channel Chat</h1>
+        <p class="text-lg md:text-xl mb-8 text-center opacity-80">Encrypted real-time messaging</p>
+        <div class="flex flex-col sm:flex-row space-y-4 sm:space-y-0 sm:space-x-4">
+            <a href="/login" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition-all duration-300">
+                Login
+            </a>
+            <a href="/register" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-6 rounded-lg shadow-lg transition-all duration-300">
+                Register
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // Initialize particlesJS with configuration
+        particlesJS('particles-js', {
+            "particles": {
+                "number": {
+                    "value": 100,
+                    "density": {
+                        "enable": true,
+                        "value_area": 800
+                    }
+                },
+                "color": {
+                    "value": "#ffffff"
+                },
+                "shape": {
+                    "type": "circle"
+                },
+                "opacity": {
+                    "value": 0.8,
+                    "random": true,
+                    "anim": {
+                        "enable": true,
+                        "speed": 0.6,
+                        "opacity_min": 0.2,
+                        "sync": false
+                    }
+                },
+                "size": {
+                    "value": 3,
+                    "random": true,
+                    "anim": {
+                        "enable": false
+                    }
+                },
+                "move": {
+                    "enable": true,
+                    "speed": 0.8,
+                    "direction": "none",
+                    "random": true,
+                    "out_mode": "out"
+                }
+            },
+            "retina_detect": true
+        });
+    </script>
+{% endblock %}

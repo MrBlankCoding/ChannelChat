@@ -1,0 +1,61 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mx-auto px-4">
+   <div class="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-md max-w-md mx-auto">
+      <div class="flex justify-between items-center mb-6">
+         <div class="flex items-center space-x-4">
+            <a href="/chat" class="text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white">
+               <i class="fas fa-home fa-lg"></i>
+            </a>
+            <h2 class="text-2xl font-bold text-gray-800 dark:text-white">User Settings</h2>
+         </div>
+         <div class="flex items-center space-x-2">
+            <button id="darkModeToggle" class="text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white">
+               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+               </svg>
+            </button>
+            <button id="logoutButton" class="text-red-600 hover:text-red-800">
+               <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+               </svg>
+            </button>
+         </div>
+      </div>
+      <div class="mb-6">
+         <div class="flex flex-col items-center">
+            <div class="relative">
+               <img id="currentProfilePhoto" class="w-32 h-32 rounded-full object-cover mb-4 shadow-lg" src="" alt="Profile Photo">
+               <div class="absolute bottom-0 right-0 bg-blue-500 text-white rounded-full p-1 cursor-pointer" onclick="document.getElementById('profilePhotoUpload').click()">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                     <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                  </svg>
+               </div>
+            </div>
+            <input type="file" id="profilePhotoUpload" accept="image/jpeg,image/png,image/gif" class="hidden">
+         </div>
+      </div>
+      <form id="settingsForm" class="space-y-4">
+         <div>
+            <label class="block mb-2 text-gray-700 dark:text-gray-300">Username</label>
+            <input type="text" id="username" class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="New Username">
+            <span id="usernameValidation" class="text-sm text-red-500 hidden">Username must be 3-20 characters</span>
+         </div>
+         <div>
+            <label class="block mb-2 text-gray-700 dark:text-gray-300">New Password</label>
+            <input type="password" id="password" class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="New Password">
+            <span id="passwordStrength" class="text-sm"></span>
+         </div>
+         <div>
+            <label class="block mb-2 text-gray-700 dark:text-gray-300">Confirm Password</label>
+            <input type="password" id="confirmPassword" class="w-full px-3 py-2 border rounded-md dark:bg-gray-700 dark:border-gray-600 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Confirm New Password">
+            <span id="passwordMatchValidation" class="text-sm text-red-500 hidden">Passwords do not match</span>
+         </div>
+         <button type="submit" id="saveSettingsBtn" class="w-full py-2 bg-green-500 dark:bg-green-600 text-white rounded-md hover:bg-green-600 dark:hover:bg-green-700 transition-colors disabled:opacity-50" disabled>
+         Save Settings
+         </button>
+      </form>
+   </div>
+</div>
+<script type="module" src="/static/js/settings.js"></script>
+{% endblock %}

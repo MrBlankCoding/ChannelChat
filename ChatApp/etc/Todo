@@ -1,0 +1,50 @@
+# **🚀 Chat App To-Do List**  
+Have the dashboard page connect to the websocket for realtime friend status updates and for preformance when loading into the main chat. 
+Fix unread badge 
+## **🔔 Notifications & Sidebar Enhancements**  
+- [ ] **Room Notifications** – Indicate unread messages from other rooms in the sidebar.  
+
+---
+
+## **📱 Progressive Web App (PWA) Enhancements**  
+- [ ] **Background Sync** – Enable offline message syncing.  
+- [ ] **Periodic Background Sync** – Implement scheduled background data updates.  
+- [ ] **Push Notifications** – Add PWA support for push notifications.  
+- [ ] **Badges** – Display unread message count on app icon.  
+
+---
+
+## **💬 Message & Search Features**  
+- [ ] **Message Search** – Add search functionality for messages.  
+
+---
+
+## **🤝 Friend Requests**  
+- [ ] **Remove Declined Requests** – Automatically delete declined friend requests from the database.  
+
+---
+
+## **⚡ Redis Integration**  
+- [ ] **Implement Redis** – Use Redis for caching and performance improvements.  
+
+---
+
+## **🖼️ Image Handling**  
+- [ ] **Image Upload UI** – Improve the user interface for image uploads.  
+- [ ] **Image Deletion** – Allow users to delete uploaded images.  
+- [ ] **Room Image Cleanup** – Automatically remove images when a room is deleted.  
+
+---
+
+## **🎨 UI/UX Enhancements**  
+- [ ] **Room Profile Images** – Allow users to set profile images for rooms.  
+- [ ] **Room Invitations** – Add functionality to invite friends to rooms.  
+- [ ] **User Search Suggestions** – Show friend name suggestions when searching for users.  
+
+---
+
+## **🚀 Production & Deployment**  
+- [ ] **Google AdSense** – Set up ads using Google AdSense.  
+- [ ] **Google Search Console** – Integrate with Google Search Console.  
+- [ ] **Buy Domain** – Purchase and configure a custom domain.  
+- [ ] **Add Images** – Ensure all necessary images are included in production.  
