@@ -18,6 +18,7 @@ from collections import defaultdict
 # Third-party imports
 import aiohttp
 import httpx
+from bson.errors import InvalidId
 from cachetools import TTLCache
 import zstandard as zstd
 from bson import ObjectId
@@ -46,12 +47,18 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import UpdateOne
 from pymongo.write_concern import WriteConcern
 from pymongo.read_preferences import ReadPreference
 import pymongo
 from passlib.context import CryptContext
 from pydantic import BaseModel, EmailStr, Field, ConfigDict
 import sentry_sdk
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.ERROR)
+logger = logging.getLogger(__name__)
 
 # Load Vars
 load_dotenv()
@@ -1534,33 +1541,58 @@ async def handle_message_delete(
 async def handle_read_receipt(
     manager, db, user_id: str, room_id: str, message_ids: List[str]
 ):
-    """Handle marking messages as read."""
-    database = await db.db  # Added await
-
-    # Update read status for multiple messages in parallel
-    update_operations = []
-    for msg_id in message_ids:
-        update_operations.append(
-            database.messages.update_one(
-                {"_id": ObjectId(msg_id)},
-                {"$addToSet": {"read_by": user_id}},
-            )
-        )
-
-    if update_operations:
-        await asyncio.gather(*update_operations)
-
-        # Broadcast read status to all users in the room
-        await manager.broadcast(
-            {
-                "type": "read_receipt",
-                "message_ids": message_ids,
-                "read_by": user_id,
-                "room_id": room_id,
-            },
-            room_id,
-        )
-
+    """Handle marking messages as read with optimized performance."""
+    if not message_ids:
+        return  # Early return if no messages to update
+        
+    try:
+        # Get database connection once
+        database = await db.db
+        
+        # Use bulk operations instead of individual updates
+        bulk_ops = []
+        for msg_id in message_ids:
+            try:
+                msg_object_id = ObjectId(msg_id)
+                bulk_ops.append(
+                    UpdateOne(
+                        {"_id": msg_object_id, "room_id": room_id},
+                        {"$addToSet": {"read_by": user_id}}
+                    )
+                )
+            except InvalidId:
+                continue  # Skip invalid IDs
+        
+        # Execute bulk operation if we have any valid operations
+        if bulk_ops:
+            # Use write concern for performance
+            write_concern = WriteConcern(w=1, j=False)
+            coll = database.get_collection('messages', write_concern=write_concern)
+            
+            # Execute the bulk operation
+            result = await coll.bulk_write(bulk_ops)
+            
+            # Only broadcast if we actually updated documents
+            if result and result.modified_count > 0:
+                # Broadcast read status to all users in the room
+                await manager.broadcast(
+                    {
+                        "type": "read_receipt",
+                        "message_ids": message_ids,
+                        "read_by": user_id,
+                        "room_id": room_id,
+                    },
+                    room_id,
+                )
+                
+                # Return the number of messages updated
+                return {"updated": result.modified_count}
+        
+        return {"updated": 0}
+    except Exception as e:
+        logger.error(f"Error handling read receipt: {str(e)}")
+        # Return error without raising exception to avoid crashing the connection
+        return {"error": "Failed to update read status"}
 
 async def process_reply_content(reply_to, message_encryption, room_id):
     """Process reply content with connection pooling."""
