@@ -119,7 +119,10 @@ app.include_router(message_fetching_router)
 
 # uvicorn main:app --host 0.0.0.0 --port 8000 --ssl-keyfile=key.pem --ssl-certfile=cert.pem --reload --log-level debug
 if __name__ == "__main__":
+    import os
     import uvicorn
 
     port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+    workers = 1  # Keep it low due to memory/CPU limits
+
+    uvicorn.run("main:app", host="0.0.0.0", port=port, workers=workers)
