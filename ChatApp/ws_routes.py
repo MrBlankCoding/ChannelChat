@@ -10,10 +10,10 @@ from firebase_admin import auth as firebase_auth
 from pymongo import UpdateOne, WriteConcern
 from starlette import status
 from starlette.websockets import WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends
 
-from ChatApp.main import logger, message_compression, app, db, manager, message_encryption
-from ChatApp.push_notif_service import send_message_notifications
-
+# Create a dedicated router for websockets
+websocket_router = APIRouter()
 
 async def handle_presence_ping(manager, user_id: str, room_id: str):
     """Handle presence ping with connection pooling."""
@@ -92,7 +92,7 @@ async def handle_message_edit(
     message_id = message_data.get("message_id")
     new_content = message_data.get("content")
 
-    database = await db.db  # Added await
+    database = await db.db
     message = await database.messages.find_one({"_id": ObjectId(message_id)})
     if not message or str(message["user_id"]) != user_id:
         return
@@ -147,7 +147,7 @@ async def handle_message_delete(
     """Handle message deletion with connection pooling."""
     message_id = message_data.get("message_id")
 
-    database = await db.db  # Added await
+    database = await db.db
     message = await database.messages.find_one({"_id": ObjectId(message_id)})
     if not message or str(message["user_id"]) != user_id:
         return
@@ -383,6 +383,9 @@ async def handle_new_message(
 
         asyncio.create_task(manager.broadcast(broadcast_message, room_id))
 
+        # Import here to avoid circular dependency
+        from ChatApp.push_notif_service import send_message_notifications
+        
         # Send push notifications to users in the room who are not the sender
         asyncio.create_task(
             send_message_notifications(
@@ -403,7 +406,27 @@ async def handle_new_message(
         raise
 
 
-@app.websocket("/ws/{token}/{room_id}")
+async def handle_disconnect(manager, user_id: str, room_id: str):
+    """Optimized disconnect handler"""
+    if user_id:
+        # Update presence first, then broadcast
+        await manager.update_presence(user_id, room_id, "offline")
+
+        # Broadcast offline status to all users in room
+        asyncio.create_task(
+            manager.broadcast(
+                {
+                    "type": "presence",
+                    "user_id": user_id,
+                    "status": "offline",
+                    "room_id": room_id,
+                },
+                room_id,
+            )
+        )
+
+
+@websocket_router.websocket("/ws/{token}/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, token: str, room_id: str):
     """WebSocket endpoint with Firebase token verification."""
     user_id = None
@@ -527,23 +550,3 @@ async def websocket_endpoint(websocket: WebSocket, token: str, room_id: str):
         print(f"Websocket error: {str(e)}")
         if user_id:
             await handle_disconnect(manager, user_id, room_id)
-
-
-async def handle_disconnect(manager, user_id: str, room_id: str):
-    """Optimized disconnect handler"""
-    if user_id:
-        # Update presence first, then broadcast
-        await manager.update_presence(user_id, room_id, "offline")
-
-        # Broadcast offline status to all users in room
-        asyncio.create_task(
-            manager.broadcast(
-                {
-                    "type": "presence",
-                    "user_id": user_id,
-                    "status": "offline",
-                    "room_id": room_id,
-                },
-                room_id,
-            )
-        )
