@@ -1,36 +1,16 @@
 import base64
-import functools
 from datetime import datetime
 from typing import Optional
 
-from fastapi import Query, Depends, HTTPException
+from fastapi import Query, Depends, HTTPException, APIRouter
 from pymongo import ReadPreference
 
-from ChatApp.main import db, message_compression, message_encryption, app
+from ChatApp.dependencies import db, message_compression, message_encryption
 from ChatApp.models import User, MessageResponse
 from ChatApp.user import get_current_user
 
-
-@functools.lru_cache(maxsize=100)
-def get_message_query_projection():
-    """Cache the projection to avoid rebuilding it for each query"""
-    return {
-        "_id": 1,
-        "content": 1,
-        "nonce": 1,
-        "username": 1,
-        "timestamp": 1,
-        "room_id": 1,
-        "room_name": 1,
-        "encrypted": 1,
-        "reply_to": 1,
-        "reactions": 1,
-        "edited": 1,
-        "edited_at": 1,
-        "read_by": 1,
-        "message_type": 1,
-    }
-
+# Create a new router for message fetching
+message_fetching_router = APIRouter()
 
 async def get_messages_optimized(
         room_id: str,
@@ -53,7 +33,20 @@ async def get_messages_optimized(
 
     # Add explicit check for compression field
     projection = {
-        **get_message_query_projection(),
+        "_id": 1,
+        "content": 1,
+        "nonce": 1,
+        "username": 1,
+        "timestamp": 1,
+        "room_id": 1,
+        "room_name": 1,
+        "encrypted": 1,
+        "reply_to": 1,
+        "reactions": 1,
+        "edited": 1,
+        "edited_at": 1,
+        "read_by": 1,
+        "message_type": 1,
         "compressed": 1,  # Ensure we get the compressed field
     }
 
@@ -107,7 +100,7 @@ async def get_messages_optimized(
     return {"messages": response_messages, "next_cursor": next_cursor}
 
 
-@app.get("/messages/{room_id}", response_model=dict)
+@message_fetching_router.get("/messages/{room_id}", response_model=dict)
 async def get_messages(
         room_id: str,
         limit: int = Query(default=50, le=100),

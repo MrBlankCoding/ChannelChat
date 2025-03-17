@@ -27,6 +27,7 @@ from ChatApp.template_routes import template_router
 from ChatApp.invite_routes import invite_router
 from ChatApp.rooms_service import rooms_router
 from ChatApp.ws_routes import websocket_router
+from ChatApp.message_routes import message_fetching_router
 
 # Configure logging
 logging.basicConfig(level=logging.ERROR)
@@ -114,6 +115,7 @@ app.include_router(template_router)
 app.include_router(invite_router)
 app.include_router(rooms_router)
 app.include_router(websocket_router)
+app.include_router(message_fetching_router)
 
 # uvicorn main:app --host 0.0.0.0 --port 8000 --ssl-keyfile=key.pem --ssl-certfile=cert.pem --reload --log-level debug
 if __name__ == "__main__":
