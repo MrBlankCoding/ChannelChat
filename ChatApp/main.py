@@ -1,7 +1,7 @@
 import asyncio
 import logging
-import sys
 import os
+import sys
 from contextlib import asynccontextmanager
 
 # Add this line to include the ChatApp directory in the Python path
@@ -10,15 +10,11 @@ sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 import pymongo
 import sentry_sdk
 # Third-party imports
-from dotenv import load_dotenv
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 
 # Import the app from app_instance
 from ChatApp.app_instance import app
 # Import dependencies from the dependencies module
-from ChatApp.dependencies import db, message_encryption, message_compression
+from ChatApp.dependencies import db
 from ChatApp.ws_connection_manager import ConnectionManager
 
 # Now these imports should work without circular dependencies

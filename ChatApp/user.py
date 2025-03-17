@@ -8,11 +8,12 @@ from firebase_admin import auth as firebase_auth, storage
 from starlette import status
 from starlette.requests import Request
 
-# Change this import
-from ChatApp.dependencies import db, oauth2_scheme, RECAPTCHA_SECRET_KEY, MIN_SCORE
 # Import the app separately (we'll modify how app is created later)
 from ChatApp.app_instance import app
+# Change this import
+from ChatApp.dependencies import db, RECAPTCHA_SECRET_KEY, MIN_SCORE
 from ChatApp.models import RecaptchaResponse, RecaptchaRequest, User
+
 
 async def get_current_user(request: Request):
     """Verify Firebase ID token and get current user."""

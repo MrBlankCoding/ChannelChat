@@ -6,14 +6,25 @@ from typing import List
 import pymongo
 from bson import ObjectId
 from bson.errors import InvalidId
+from fastapi import APIRouter
 from firebase_admin import auth as firebase_auth
 from pymongo import UpdateOne, WriteConcern
 from starlette import status
 from starlette.websockets import WebSocket, WebSocketDisconnect
-from fastapi import APIRouter, Depends
+
+from ChatApp.dependencies import db, message_compression
+from ChatApp.message_encryption import MessageEncryption
+from ChatApp.ws_connection_manager import ConnectionManager
+
+# Create an instance of ConnectionManager
+manager = ConnectionManager()
 
 # Create a dedicated router for websockets
 websocket_router = APIRouter()
+
+# Initialize the message_encryption instance
+message_encryption = MessageEncryption()
+
 
 async def handle_presence_ping(manager, user_id: str, room_id: str):
     """Handle presence ping with connection pooling."""
@@ -210,7 +221,7 @@ async def handle_read_receipt(
 
         return {"updated": 0}
     except Exception as e:
-        logger.error(f"Error handling read receipt: {str(e)}")
+        print(f"Error handling read receipt: {str(e)}")
         # Return error without raising exception to avoid crashing the connection
         return {"error": "Failed to update read status"}
 
@@ -385,7 +396,7 @@ async def handle_new_message(
 
         # Import here to avoid circular dependency
         from ChatApp.push_notif_service import send_message_notifications
-        
+
         # Send push notifications to users in the room who are not the sender
         asyncio.create_task(
             send_message_notifications(

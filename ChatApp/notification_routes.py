@@ -1,17 +1,16 @@
 from datetime import datetime
-from typing import Optional, Dict, List
 
 import pymongo
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException
 from starlette import status
 
-from ChatApp.models import FCMTokenCreate, PushNotification
-from ChatApp.dependencies import db
-from ChatApp.user import get_current_user
 from ChatApp.dependencies import db  # Import db from dependencies instead of main
+from ChatApp.models import FCMTokenCreate, PushNotification
+from ChatApp.user import get_current_user
 
 # Create an APIRouter instance
 notification_router = APIRouter(tags=["notifications"])
+
 
 @notification_router.post("/users/fcm-tokens")
 async def register_fcm_token(

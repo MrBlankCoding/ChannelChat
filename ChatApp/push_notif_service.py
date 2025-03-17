@@ -1,12 +1,12 @@
 import asyncio
 import time
-from datetime import datetime
 from typing import Optional, Dict, List
 
 import aiohttp
 import firebase_admin
 import google.auth
 from firebase_admin import messaging
+
 
 class FirebaseNotificationService:
     def __init__(self):

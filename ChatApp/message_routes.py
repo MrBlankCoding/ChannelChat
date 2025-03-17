@@ -12,6 +12,7 @@ from ChatApp.user import get_current_user
 # Create a new router for message fetching
 message_fetching_router = APIRouter()
 
+
 async def get_messages_optimized(
         room_id: str,
         limit: int = Query(default=50, le=100),

@@ -7,8 +7,8 @@ from cachetools import TTLCache
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 
-from ChatApp.db import Database
 from ChatApp.compression import MessageCompression
+from ChatApp.db import Database
 from ChatApp.message_encryption import MessageEncryption
 from ChatApp.settings import Settings
 

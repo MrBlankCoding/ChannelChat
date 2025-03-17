@@ -9,7 +9,9 @@ template_router = APIRouter(tags=["templates"])
 
 # Get templates from main
 from fastapi.templating import Jinja2Templates
+
 templates = Jinja2Templates(directory="templates")
+
 
 @template_router.get("/", response_class=HTMLResponse)
 async def landing(request: Request):

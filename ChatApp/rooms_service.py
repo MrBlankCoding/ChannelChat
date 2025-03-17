@@ -14,6 +14,7 @@ from ChatApp.user import get_current_user
 # Create a router
 rooms_router = APIRouter(tags=["rooms"])
 
+
 async def generate_room_code() -> str:
     """Generate unique room code."""
     db_instance = await db.db

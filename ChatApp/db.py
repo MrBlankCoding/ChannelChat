@@ -7,6 +7,7 @@ import pymongo
 from motor.motor_asyncio import AsyncIOMotorClient
 
 from ChatApp.settings import Settings
+
 settings = Settings()
 
 

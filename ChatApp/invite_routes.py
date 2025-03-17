@@ -7,15 +7,16 @@ from typing import List
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 
+from ChatApp.dependencies import db
 # Local imports
 from ChatApp.models import RoomInviteCreate, RoomInvite, RoomInviteResponse, InviteActionResponse, RoomMember
 from ChatApp.rooms_service import get_room_by_id, get_user_by_id, get_invite_by_id, check_room_membership, \
     check_existing_invite
 from ChatApp.user import get_current_user
-from ChatApp.dependencies import db
 
 # Create the router
 invite_router = APIRouter(tags=["invites"])
+
 
 @invite_router.get("/users/search", response_model=List[dict])
 async def search_users(q: str, current_user: dict = Depends(get_current_user)):
