@@ -25,16 +25,12 @@ from passlib.context import CryptContext
 from ChatApp.compression import MessageCompression
 from ChatApp.db import Database
 from ChatApp.message_encryption import MessageEncryption
-from ChatApp.push_notif_service import FirebaseNotificationService
 from ChatApp.settings import Settings
 from ChatApp.ws_connection_manager import ConnectionManager
 
 # Configure logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
-
-# Load Vars
-load_dotenv()
 
 # Config
 settings = Settings()
@@ -89,63 +85,52 @@ app.add_middleware(
 @asynccontextmanager
 async def lifespan_context(app: FastAPI):
     """Manage app startup and shutdown with connection pooling."""
-    global db, fcm_service
+    global db
     db = Database()
-    fcm_service = FirebaseNotificationService()
 
     try:
-        # Startup logic with retries
         max_retries = 3
-        retry_delay = 5  # seconds
+        retry_delay = 5
 
         for attempt in range(max_retries):
             try:
-                # Attempt database connection
                 await db.connect()
-                # Test the connection by performing a simple operation
                 async with db.get_client() as client:
                     await client.admin.command("ping")
-
-                print(
-                    f"✓ Successfully connected to database (attempt {attempt + 1}/{max_retries})"
-                )
+                print(f"✓ Successfully connected to database (attempt {attempt + 1}/{max_retries})")
                 break
-
             except asyncio.TimeoutError as attempt_exception:
                 if attempt == max_retries - 1:
-                    raise RuntimeError(
-                        "Database connection timeout after all retry attempts"
-                    ) from attempt_exception
-                print(
-                    f"× Connection attempt {attempt + 1}/{max_retries} timed out, retrying in {retry_delay} seconds..."
-                )
+                    raise RuntimeError("Database connection timeout after all retry attempts") from attempt_exception
+                print(f"× Connection attempt {attempt + 1}/{max_retries} timed out, retrying in {retry_delay} seconds...")
                 await asyncio.sleep(retry_delay)
-
             except (pymongo.errors.PyMongoError, asyncio.TimeoutError) as e:
                 if attempt == max_retries - 1:
-                    raise RuntimeError(
-                        f"Failed to connect to database after {max_retries} attempts: {str(e)}"
-                    ) from e
-                print(
-                    f"× Connection attempt {attempt + 1}/{max_retries} failed: {str(e)}, retrying in {retry_delay} seconds..."
-                )
+                    raise RuntimeError(f"Failed to connect to database after {max_retries} attempts: {str(e)}") from e
+                print(f"× Connection attempt {attempt + 1}/{max_retries} failed: {str(e)}, retrying in {retry_delay} seconds...")
                 await asyncio.sleep(retry_delay)
 
-        # Create indexes for FCM tokens
         async with db.get_client() as client:
             database = client[db._database_name]
             await database.fcm_tokens.create_index([("token", 1)], unique=True)
             await database.fcm_tokens.create_index([("user_id", 1)])
             await database.fcm_tokens.create_index([("device_id", 1)])
 
-        yield  # Hand over control to the app
+        # Only import fcm_service after app and db are defined
+        from ChatApp.fcm_service import fcm_service
+        
+        # Setup notification routes
+        from ChatApp.notification_routes import setup_notification_routes
+        global send_message_notifications
+        send_message_notifications = setup_notification_routes(app, db)
+        
+        yield
 
     except Exception as e:
         print(f"! Critical error during startup: {str(e)}")
-        raise  # Re-raise the exception to prevent app startup
+        raise
 
     finally:
-        # Shutdown logic
         try:
             await db.close()
             print("✓ Database connections closed successfully")
