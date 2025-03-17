@@ -1,18 +1,23 @@
+# Standard library imports
 import re
 from datetime import datetime
 from typing import List
 
+# Third-party imports
 from bson import ObjectId
-from fastapi import Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 
-from ChatApp.main import app, db
+# Local imports
 from ChatApp.models import RoomInviteCreate, RoomInvite, RoomInviteResponse, InviteActionResponse, RoomMember
 from ChatApp.rooms_service import get_room_by_id, get_user_by_id, get_invite_by_id, check_room_membership, \
     check_existing_invite
 from ChatApp.user import get_current_user
+from ChatApp.dependencies import db
 
+# Create the router
+invite_router = APIRouter(tags=["invites"])
 
-@app.get("/users/search", response_model=List[dict])
+@invite_router.get("/users/search", response_model=List[dict])
 async def search_users(q: str, current_user: dict = Depends(get_current_user)):
     """Search for users by username or email."""
     # Skip empty queries
@@ -52,7 +57,7 @@ async def search_users(q: str, current_user: dict = Depends(get_current_user)):
     return results
 
 
-@app.post("/room/invite", response_model=dict)
+@invite_router.post("/room/invite", response_model=dict)
 async def invite_user_to_room(invite: RoomInviteCreate, current_user: dict = Depends(get_current_user)):
     """Invite a user to a room."""
     database = await db.db
@@ -101,7 +106,7 @@ async def invite_user_to_room(invite: RoomInviteCreate, current_user: dict = Dep
     }
 
 
-@app.get("/invites/pending", response_model=List[RoomInviteResponse])
+@invite_router.get("/invites/pending", response_model=List[RoomInviteResponse])
 async def get_pending_invites(current_user: dict = Depends(get_current_user)):
     """Get all pending invites for the current user."""
     database = await db.db
@@ -145,7 +150,7 @@ async def get_pending_invites(current_user: dict = Depends(get_current_user)):
     return result
 
 
-@app.get("/rooms/{room_id}/invites", response_model=List[RoomInviteResponse])
+@invite_router.get("/rooms/{room_id}/invites", response_model=List[RoomInviteResponse])
 async def get_room_invites(room_id: str, current_user: dict = Depends(get_current_user)):
     """Get all pending invites for a specific room."""
     database = await db.db
@@ -186,7 +191,7 @@ async def get_room_invites(room_id: str, current_user: dict = Depends(get_curren
     return result
 
 
-@app.post("/invites/{invite_id}/accept", response_model=InviteActionResponse)
+@invite_router.post("/invites/{invite_id}/accept", response_model=InviteActionResponse)
 async def accept_invite(invite_id: str, current_user: dict = Depends(get_current_user)):
     """Accept a room invitation."""
     database = await db.db
@@ -252,7 +257,7 @@ async def accept_invite(invite_id: str, current_user: dict = Depends(get_current
     )
 
 
-@app.post("/invites/{invite_id}/decline", response_model=InviteActionResponse)
+@invite_router.post("/invites/{invite_id}/decline", response_model=InviteActionResponse)
 async def decline_invite(invite_id: str, current_user: dict = Depends(get_current_user)):
     """Decline a room invitation."""
     database = await db.db

@@ -5,12 +5,14 @@ from typing import Optional, List
 
 import pymongo
 from bson import ObjectId
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, APIRouter
 
-from ChatApp.main import db, app
+from ChatApp.dependencies import db
 from ChatApp.models import RoomResponse, RoomCreate, RoomMember, RoomJoin
 from ChatApp.user import get_current_user
 
+# Create a router
+rooms_router = APIRouter(tags=["rooms"])
 
 async def generate_room_code() -> str:
     """Generate unique room code."""
@@ -84,7 +86,7 @@ async def check_existing_invite(user_id: str, room_id: str) -> bool:
     return invite is not None
 
 
-@app.post("/rooms", response_model=RoomResponse)
+@rooms_router.post("/rooms", response_model=RoomResponse)
 async def create_room(room: RoomCreate, current_user: dict = Depends(get_current_user)):
     """Create new chat room with creator as first member."""
     code = await generate_room_code()
@@ -130,7 +132,7 @@ async def create_room(room: RoomCreate, current_user: dict = Depends(get_current
     return RoomResponse(**response_dict)
 
 
-@app.post("/rooms/join", response_model=RoomResponse)
+@rooms_router.post("/rooms/join", response_model=RoomResponse)
 async def join_room(room_join: RoomJoin, current_user: dict = Depends(get_current_user)):
     """Join existing room by code."""
     database = await db.db
@@ -198,7 +200,7 @@ async def join_room(room_join: RoomJoin, current_user: dict = Depends(get_curren
     )
 
 
-@app.get("/rooms", response_model=List[RoomResponse])
+@rooms_router.get("/rooms", response_model=List[RoomResponse])
 async def get_user_rooms(current_user: dict = Depends(get_current_user)):
     """Get rooms where user is a member."""
     user_id = str(current_user["_id"])
@@ -244,7 +246,7 @@ async def get_user_rooms(current_user: dict = Depends(get_current_user)):
     return result
 
 
-@app.get("/rooms/{room_id}", response_model=RoomResponse)
+@rooms_router.get("/rooms/{room_id}", response_model=RoomResponse)
 async def get_room(room_id: str, current_user: dict = Depends(get_current_user)):
     """Get a single room by ID."""
     database = await db.db
@@ -287,7 +289,7 @@ async def get_room(room_id: str, current_user: dict = Depends(get_current_user))
     )
 
 
-@app.delete("/rooms/{room_id}/leave")
+@rooms_router.delete("/rooms/{room_id}/leave")
 async def leave_room(room_id: str, current_user: dict = Depends(get_current_user)):
     """Leave a room (remove user from members)."""
     user_id = str(current_user["_id"])
@@ -322,7 +324,7 @@ async def leave_room(room_id: str, current_user: dict = Depends(get_current_user
     return {"message": "Successfully left the room"}
 
 
-@app.delete("/rooms/{room_id}")
+@rooms_router.delete("/rooms/{room_id}")
 async def delete_room(room_id: str, current_user: dict = Depends(get_current_user)):
     """Delete room and its messages."""
     room = await get_room_by_id(room_id)
@@ -345,7 +347,7 @@ async def delete_room(room_id: str, current_user: dict = Depends(get_current_use
     return {"message": "Room and related data deleted successfully"}
 
 
-@app.get("/rooms/{room_id}/members", response_model=List[dict])
+@rooms_router.get("/rooms/{room_id}/members", response_model=List[dict])
 async def get_room_members(room_id: str, current_user: dict = Depends(get_current_user)):
     """Get all members of a room."""
     user_id = str(current_user["_id"])
