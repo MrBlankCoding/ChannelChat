@@ -50,6 +50,9 @@ class ImageGallery {
     modal
       .querySelector("#galleryNext")
       .addEventListener("click", () => this.showNext());
+    modal
+      .querySelector("#galleryDownload")
+      .addEventListener("click", () => this.downloadCurrentImage());
 
     return modal;
   }
@@ -105,6 +108,71 @@ class ImageGallery {
     const nextBtn = this.modal.querySelector("#galleryNext");
     prevBtn.style.display = this.images.length > 1 ? "block" : "none";
     nextBtn.style.display = this.images.length > 1 ? "block" : "none";
+  }
+
+  downloadCurrentImage() {
+    if (this.images.length === 0 || this.currentIndex < 0) return;
+    
+    const currentImageUrl = this.images[this.currentIndex];
+    
+    // For Firebase Storage or other URLs that might have CORS restrictions
+    fetch(currentImageUrl)
+      .then(response => response.blob())
+      .then(blob => {
+        // Create a blob URL for the image
+        const blobUrl = URL.createObjectURL(blob);
+        
+        // Create a temporary link element
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        
+        // Extract filename from URL or use a default name
+        let filename = 'image.jpg';
+        try {
+          // Try to get the filename from the URL path
+          const urlPath = new URL(currentImageUrl).pathname;
+          const pathSegments = urlPath.split('/');
+          const lastSegment = pathSegments[pathSegments.length - 1];
+          
+          // If there's a query string, remove it
+          filename = lastSegment.split('?')[0];
+          
+          // If no extension, add .jpg
+          if (!filename.includes('.')) {
+            filename += '.jpg';
+          }
+        } catch (e) {
+          console.error('Error extracting filename:', e);
+          // Use default filename
+        }
+        
+        link.download = filename;
+        
+        // Append to body, click, and remove
+        document.body.appendChild(link);
+        link.click();
+        
+        // Clean up
+        document.body.removeChild(link);
+        URL.revokeObjectURL(blobUrl);
+      })
+      .catch(error => {
+        console.error('Error downloading image:', error);
+        
+        // Fallback to the original method if fetch fails
+        try {
+          const link = document.createElement('a');
+          link.href = currentImageUrl;
+          link.download = currentImageUrl.split('/').pop() || 'image.jpg';
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        } catch (e) {
+          console.error('Fallback download failed:', e);
+          alert('Could not download the image. Try right-clicking and using "Save image as..."');
+        }
+      });
   }
 }
 
