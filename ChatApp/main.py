@@ -113,7 +113,7 @@ app.include_router(rooms_router)
 app.include_router(websocket_router)
 app.include_router(message_fetching_router)
 
-# uvicorn main:app --host 0.0.0.0 --port 8000 --ssl-keyfile=key.pem --ssl-certfile=cert.pem --reload --log-level debug
+#uvicorn main:app --host 127.0.0.1 --port 8080 --ssl-keyfile=key.pem --ssl-certfile=cert.pem --reload --log-level debug
 if __name__ == "__main__":
     import os
     import uvicorn
