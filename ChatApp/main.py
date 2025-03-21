@@ -25,6 +25,9 @@ from ChatApp.rooms_service import rooms_router
 from ChatApp.ws_routes import websocket_router
 from ChatApp.message_routes import message_fetching_router
 
+# Import fcm_service from services
+from ChatApp.fcm_service import fcm_service
+
 # Configure logging
 logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -83,9 +86,7 @@ async def lifespan_context(app):
             await database.fcm_tokens.create_index([("user_id", 1)])
             await database.fcm_tokens.create_index([("device_id", 1)])
 
-        # Initialize FCM service
-        from ChatApp.fcm_service import fcm_service
-
+        # Use fcm_service here (already initialized)
         yield
 
     except Exception as e:
@@ -113,7 +114,7 @@ app.include_router(rooms_router)
 app.include_router(websocket_router)
 app.include_router(message_fetching_router)
 
-#uvicorn main:app --host 127.0.0.1 --port 8080 --ssl-keyfile=key.pem --ssl-certfile=cert.pem --reload --log-level debug
+# uvicorn main:app --host 127.0.0.1 --port 8080 --ssl-keyfile=key.pem --ssl-certfile=cert.pem --reload --log-level debug
 if __name__ == "__main__":
     import os
     import uvicorn

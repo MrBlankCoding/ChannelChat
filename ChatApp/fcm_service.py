@@ -1,5 +1,4 @@
-# Import the service class only
-from ChatApp.push_notif_service import FirebaseNotificationService
+from ChatApp.notif_service import FirebaseNotificationService
 
-# Create the singleton instance
+# Initialize FCM service here
 fcm_service = FirebaseNotificationService()
