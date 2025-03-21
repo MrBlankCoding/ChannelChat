@@ -18,7 +18,7 @@ from ChatApp.dependencies import db
 from ChatApp.ws_connection_manager import ConnectionManager
 
 # Now these imports should work without circular dependencies
-from ChatApp.notification_routes import notification_router
+from ChatApp.push_notif_service import notification_router
 from ChatApp.template_routes import template_router
 from ChatApp.invite_routes import invite_router
 from ChatApp.rooms_service import rooms_router

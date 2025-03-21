@@ -2,101 +2,48 @@
 <html lang="en" class="h-full scroll-smooth">
    <head>
       <meta charset="UTF-8" />
-      <title>Channel Chat</title>
-      
-      <!-- PWA Meta Tags -->
       <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+      <title>Channel Chat</title>
+
+      <!-- PWA & Mobile Optimization -->
       <meta name="theme-color" content="#3B82F6" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
-      <meta name="apple-mobile-web-app-status-bar-style" content="default" />
       <meta name="apple-mobile-web-app-title" content="Channel Chat" />
-      
-      <!-- Manifest and Icons -->
+
+      <!-- Manifest & Icons -->
       <link rel="manifest" href="/static/manifest.json" />
+      <link rel="icon" href="/static/favicon.ico" />
       <link rel="apple-touch-icon" href="/static/images/manifest-icon-192.maskable.png" />
-      <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
-      
-      <!-- Stylesheets -->
-      <script src="https://cdn.tailwindcss.com"></script>
-      <script>
-         tailwind.config = { darkMode: "class" };
-      </script>
-      <script type="module" src="/static/js/auth.js"></script>
-      <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
-      
-      <!-- Scripts -->
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.24.0/axios.min.js"></script>
-      
+
       <!-- SEO Meta Tags -->
-      <meta name="description" content="Channel Chat, a simple, encrypted messaging app for real-time conversations." />
-      <meta name="keywords" content="Chat app, messaging app, real-time chat, chatroom, social app, encrypted chat" />
-      
-      <!-- OG Tags -->
+      <meta name="description" content="Channel Chat – A secure, real-time chat app with encrypted messaging." />
+      <meta name="keywords" content="chat, real-time chat, messaging, secure messaging, encrypted chat" />
+      <link rel="canonical" href="https://channelchat.onrender.com/" />
+
+      <!-- Open Graph Tags -->
       <meta property="og:title" content="Channel - Encrypted Chat App" />
-      <meta property="og:description" content="Connect instantly with Channel, a real-time chatroom-based messaging app." />
-      <meta property="og:image" content="/static/images/preview.png" />
-      <meta property="og:url" content="{{ request.url }}" />
+      <meta property="og:description" content="Connect instantly with Channel, a secure real-time chatroom-based messaging app." />
+      <meta property="og:image" content="https://channelchat.onrender.com/static/images/preview.png" />
+      <meta property="og:url" content="https://channelchat.onrender.com/" />
       <meta property="og:type" content="website" />
-      
-      <!-- Twitter Tags -->
+
+      <!-- Twitter Card -->
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:title" content="Channel - Encrypted Chat App" />
       <meta name="twitter:description" content="A real-time chatroom app for seamless communication." />
-      <meta name="twitter:image" content="/static/images/preview.png" />
-      
-      <!-- Canonical & Robots -->
-      <link rel="canonical" href="{{ request.url }}" />
-      <meta name="robots" content="index, follow" />
+      <meta name="twitter:image" content="https://channelchat.onrender.com/static/images/preview.png" />
 
-      <!-- Dark Mode Script -->
-      <script>
-         document.addEventListener("DOMContentLoaded", () => {
-             const html = document.documentElement;
-             const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-         
-             if (localStorage.getItem("darkMode") === "dark" || (!localStorage.getItem("darkMode") && prefersDark)) {
-                 html.classList.add("dark");
-             } else {
-                 html.classList.remove("dark");
-             }
-         });
-      </script>
+      <!-- Styles -->
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+      <script defer src="https://cdn.tailwindcss.com"></script>
+      <script defer src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
 
-      <!-- Service Worker Registration -->
-      <script>
-         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
-                .then(registration => {
-                    console.log('ServiceWorker registered with scope:', registration.scope);
-                    return navigator.serviceWorker.ready;
-                })
-                .then(registration => {
-                    if (registration.active) {
-                        console.log('ServiceWorker ready state:', registration.active.state);
-                    }
-                })
-                .catch(err => {
-                    console.error('ServiceWorker registration failed:', err);
-                });
-        }
-
-        console.log('ServiceWorker supported:', 'serviceWorker' in navigator);
-
-        // Handle offline/online status
-        window.addEventListener('online', () => {
-            document.getElementById('offline-notification').classList.add('hidden');
-        });
-
-        window.addEventListener('offline', () => {
-            document.getElementById('offline-notification').classList.remove('hidden');
-        });
-      </script>
    </head>
 
    <body class="h-full min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-300 flex flex-col">
-      <!-- Main Content Area -->
-         {% block content %} {% endblock %}
-      </div>
+      <!-- Main Content -->
+      {% block content %} {% endblock %}
+
       <!-- Offline Notification -->
       <div id="offline-notification" class="hidden fixed bottom-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg text-sm">
          ⚠️ You are currently offline. Some features may be limited.
