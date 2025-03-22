@@ -245,7 +245,6 @@ class MessageRenderer {
   }
 
   getBubbleShape(isCurrentUser, messagePosition) {
-    // Updated bubble shapes for better symmetry between first and last messages
     if (isCurrentUser) {
       switch (messagePosition) {
         case "first":
@@ -253,7 +252,7 @@ class MessageRenderer {
         case "middle":
           return "rounded-l-2xl rounded-r-md"; // Middle
         case "last":
-          return "rounded-b-2xl rounded-l-2xl rounded-tr-md bubble-last current-user"; // Last in group - now symmetrical with first
+          return "rounded-b-2xl rounded-l-2xl rounded-tr-md bubble-last current-user"; // Last in group
         default:
           return "rounded-2xl"; // Single message
       }
@@ -264,14 +263,14 @@ class MessageRenderer {
         case "middle":
           return "rounded-r-2xl rounded-l-md"; // Middle
         case "last":
-          return "rounded-b-2xl rounded-r-2xl rounded-tl-md bubble-last other-user"; // Last in group - now symmetrical with first
+          return "rounded-b-2xl rounded-r-2xl rounded-tl-md bubble-last other-user"; // Last in group
         default:
           return "rounded-2xl"; // Single message
       }
     }
   }
 
-  async createMessageHTML(
+async createMessageHTML(
     {
       id,
       username,
@@ -325,36 +324,34 @@ class MessageRenderer {
       read_by
     );
 
-    // Profile photo
+    // Profile photo - Now positioned next to the message, not with username
     let profilePhotoHtml = "";
-    if (showHeader && !isCurrentUser) {
+    if (!isCurrentUser) {
       const profilePhotoUrl = await this.getUserProfilePhoto(username);
       if (profilePhotoUrl) {
         profilePhotoHtml = `
-          <img src="${profilePhotoUrl}" 
-               alt="${username}'s profile" 
-               class="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-600">
-        `;
+        <img src="${profilePhotoUrl}" 
+             alt="${username}'s profile" 
+             class="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-600">
+      `;
       } else {
         // Fallback avatar if no profile photo
         profilePhotoHtml = `
-          <div class="w-8 h-8 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold">
-            ${username.charAt(0).toUpperCase()}
-          </div>
-        `;
+        <div class="w-8 h-8 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold">
+          ${username.charAt(0).toUpperCase()}
+        </div>
+      `;
       }
     }
 
-    // IG-style Layout: Profile Photo in own column + centered username
+    // Username shown above message
     const headerHtml =
       showHeader && !isCurrentUser
         ? `
-        <div class="flex flex-col items-center mb-1">
-          <div class="text-xs font-bold text-slate-500 dark:text-slate-400 text-center">
-            ${username}
-          </div>
-        </div>
-      `
+      <div class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
+        ${username}
+      </div>
+    `
         : "";
 
     // Reply
@@ -402,73 +399,63 @@ class MessageRenderer {
     const spacingClass = isLastInGroup ? "mb-2" : "mb-0.5";
     const bubbleMargin = !showHeader ? "mt-0.5" : "";
 
-    // New Instagram-style layout with profile photo in its own column
+    const messageInfoHtml = `
+      <div class="message-info ${isCurrentUser ? 'ml-2' : 'mr-2'} absolute bottom-0 ${
+        isCurrentUser ? 'left-0 translate-x-[-100%]' : 'right-0 translate-x-[100%]'
+      } text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap
+           text-slate-400 dark:text-slate-500 flex items-center gap-1 pointer-events-none" 
+           aria-label="Message info">
+          <span class="message-timestamp" title="${messageDate.toLocaleString()}">${timeDisplay}</span>
+          ${isCurrentUser ? readReceiptHtml : ""}
+      </div>
+    `;
+
     return `
-    <div class="flex message relative ${spacingClass} group animate-fade-in" 
+    <div class="flex message relative ${spacingClass} group animate-fade-in ${
+      isCurrentUser ? "justify-end" : ""
+    }" 
         data-message-id="${messageId}"
         data-username="${username}"
         data-type="${type}"
         data-timestamp="${messageDate.getTime()}"
         data-position="${messagePosition}">
         
-        ${
-          !isCurrentUser
-            ? `
-        <div class="flex-shrink-0 w-10 mr-2 ${
-          showHeader ? "block" : "opacity-0"
-        }">
-          ${profilePhotoHtml}
-        </div>
-        `
-            : ""
-        }
+        <!-- Profile photo column for other users -->
+    ${
+      !isCurrentUser
+        ? `
+    <div class="flex-shrink-0 mr-2 ${showHeader ? "block" : "invisible"}">
+      ${profilePhotoHtml}
+    </div>
+    `
+        : ""
+    }
         
-        <div class="flex flex-col ${
-          isCurrentUser ? "items-end ml-auto" : "items-start"
-        } max-w-[75%] sm:max-w-[85%] md:max-w-[75%] relative">
-            ${headerHtml}
-            <div class="message-container relative ${bubbleMargin}">
+        <!-- Message content -->
+    <div class="flex flex-col ${
+      isCurrentUser ? "items-end" : "items-start"
+    } max-w-[75%] sm:max-w-[85%] md:max-w-[75%] relative">
+        ${headerHtml}
+        <div class="message-container relative ${bubbleMargin}">
                 ${replyContent}
-                <div class="message-bubble px-4 py-2 ${bubbleShape} ${bubbleClasses} ${bubbleShadow}">
+                <div class="message-bubble px-4 py-2 ${bubbleShape} ${bubbleClasses} ${bubbleShadow} relative">
                     <div class="text-sm message-content">
                         ${messageContent}${editedLabel}
                     </div>
+                    ${messageInfoHtml}
                 </div>
                 ${linkPreviewHtml}
                 ${reactionsHtml}
             </div>
             
             ${messageActionsHtml}
-            
-            ${
-              isLastInGroup
-                ? `
-            <div class="message-info text-xs mt-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 text-slate-400 dark:text-slate-500 flex items-center gap-1" 
-                 aria-label="Message info">
-                <span class="message-timestamp" title="${messageDate.toLocaleString()}">${timeDisplay}</span>
-                ${readReceiptHtml}
-            </div>
-            `
-                : ""
-            }
         </div>
-        
-        ${
-          isCurrentUser
-            ? `
-        <div class="flex-shrink-0 w-10 ml-2 ${
-          showHeader ? "block" : "opacity-0"
-        }">
-        </div>
-        `
-            : ""
-        }
     </div>
   `;
   }
 
   createReadReceiptHtml(isCurrentUser, isLastInGroup, read_by) {
-    if (!isCurrentUser || !isLastInGroup) return "";
+    if (!isCurrentUser) return "";
 
     return `
       <div class="read-receipt-container flex items-center gap-1 text-xs ${
@@ -690,13 +677,18 @@ class MessageRenderer {
         position: relative;
       }
       
-      /* Instagram-style layout adjustments */
+      /* Message grouping spacing - increase the gap between messages */
       .message {
-        display: flex;
-        align-items: flex-start;
+        margin-bottom: 4px; /* Base spacing between all messages */
       }
-      
-      /* Bubble tails - symmetrical with first bubble */
+
+      /* Make the last bubble in a group more distinctive */
+      .bubble-last {
+        position: relative;
+        margin-bottom: 12px; /* Larger margin after last message in a group */
+      }
+
+      /* Enhance the bubble tails for more visibility */
       .bubble-last.current-user::after {
         content: "";
         position: absolute;
@@ -707,9 +699,10 @@ class MessageRenderer {
         background: inherit;
         border-bottom-right-radius: 50%;
         transform: rotate(45deg);
+        box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.1); /* Add shadow to make it more visible */
         z-index: -1;
       }
-      
+
       .bubble-last.other-user::after {
         content: "";
         position: absolute;
@@ -720,7 +713,41 @@ class MessageRenderer {
         background: inherit;
         border-bottom-left-radius: 50%;
         transform: rotate(-45deg);
+        box-shadow: 2px 2px 2px rgba(0, 0, 0, 0.1); /* Add shadow to make it more visible */
         z-index: -1;
+      }
+      
+      /* Message info hover effect */
+      /* Message info hover effect - updated positioning */
+      .message-info {
+        opacity: 0;
+        transition: opacity 0.2s ease-in-out;
+        /* Position absolutely to the side of the bubble instead of below */
+        bottom: 4px;
+        z-index: 20;
+        background-color: rgba(255, 255, 255, 0.9);
+        border-radius: 4px;
+        padding: 2px 6px;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      }
+      
+      .message:hover .message-info {
+        opacity: 1;
+      }
+      
+      /* Dark mode support for the message info */
+      @media (prefers-color-scheme: dark) {
+        .message-info {
+          background-color: rgba(30, 41, 59, 0.9);
+        }
+      }
+      
+      /* More responsive on mobile */
+      @media (max-width: 640px) {
+        .message-info {
+          font-size: 0.65rem;
+          padding: 1px 4px;
+        }
       }
       
       /* Message grouping spacing */
@@ -728,77 +755,81 @@ class MessageRenderer {
         margin-bottom: 4px;
       }
       
-      /* Middle bubble connections */
-      [data-position="middle"]:not(.justify-end) .message-bubble {
-        border-top-left-radius: 0.25rem;
-        border-bottom-left-radius: 0.25rem;
-      }
-      
-      [data-position="middle"].justify-end .message-bubble {
-        border-top-right-radius: 0.25rem;
-        border-bottom-right-radius: 0.25rem;
-      }
-      
-      /* First bubble in a group */
-      [data-position="first"]:not(.justify-end) .message-bubble {
-        border-top-left-radius: 1rem;
-      }
-      
-      [data-position="first"].justify-end .message-bubble {
-        border-top-right-radius: 1rem;
-      }
-        .message-actions {
-    visibility: hidden;
-    opacity: 0;
-    transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out;
-    z-index: 10;
-}
-
-.message:hover .message-actions {
-    visibility: visible;
-    opacity: 1;
-}
-
-.action-button {
-    padding: 4px;
-    border-radius: 4px;
-    transition: background-color 0.2s ease-in-out;
-}
-
-.action-button:hover {
-    background-color: #f3f4f6;
-}
-    @keyframes slideDown {
-    from {
+      /* Message actions */
+      .message-actions {
+        visibility: hidden;
         opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
+        transition: opacity 0.2s ease-in-out, visibility 0.2s ease-in-out, transform 0.2s ease-in-out;
+        z-index: 10;
+      }
+      
+      .message:hover .message-actions {
+        visibility: visible;
         opacity: 1;
-        transform: translateY(0);
-    }
-}
-    .loading-more-indicator {
-    position: sticky;
-    top: 0;
-    z-index: 10;
-    background: rgba(255, 255, 255, 0.9);
-}
-
-.hidden {
-    display: none;
-}
-
-@keyframes slideUp {
-    from {
-        opacity: 1; 
-        transform: translateY(0);
-    }
-    to {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-}
+        transform: scale(1);
+      }
+      
+      .action-button {
+        padding: 4px;
+        border-radius: 4px;
+        transition: background-color 0.2s ease-in-out;
+      }
+      
+      .action-button:hover {
+        background-color: #f3f4f6;
+      }
+      
+      /* Loading animations */
+      @keyframes slideDown {
+        from {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      
+      @keyframes slideUp {
+        from {
+          opacity: 1; 
+          transform: translateY(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateY(-10px);
+        }
+      }
+      
+      .loading-more-indicator {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background: rgba(255, 255, 255, 0.9);
+      }
+      
+      .hidden {
+        display: none;
+      }
+      
+      /* Improve readability in dark mode */
+      @media (prefers-color-scheme: dark) {
+        .message-bubble.bg-blue-500 {
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+        }
+        
+        .message-bubble.bg-slate-700 {
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+        }
+      }
+      
+      /* Improve mobile experience */
+      @media (max-width: 640px) {
+        .message .max-w-[75%] {
+          max-width: 85%;
+        }
+      }
     `;
     document.head.appendChild(style);
   }
