@@ -11,3 +11,6 @@ name searching for freinds
 
 Add websocket to dashboard
 split backend into mutiple files
+
+
+npx @tailwindcss/cli -i ./static/css/input.css -o ./static/css/output.css --watch

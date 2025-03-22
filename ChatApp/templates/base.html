@@ -34,9 +34,52 @@
       <meta name="twitter:image" content="https://channelchat.onrender.com/static/images/preview.png" />
 
       <!-- Styles -->
-      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-      <script defer src="https://cdn.tailwindcss.com"></script>
+      <link defer rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+      <link rel="stylesheet" href="/static/css/output.css" />
       <script defer src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+      <script>
+         document.addEventListener("DOMContentLoaded", () => {
+             const html = document.documentElement;
+             const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+         
+             if (localStorage.getItem("darkMode") === "dark" || (!localStorage.getItem("darkMode") && prefersDark)) {
+                 html.classList.add("dark");
+             } else {
+                 html.classList.remove("dark");
+             }
+         });
+      </script>
+
+      <!-- Service Worker Registration -->
+      <script>
+         if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+                .then(registration => {
+                    console.log('ServiceWorker registered with scope:', registration.scope);
+                    return navigator.serviceWorker.ready;
+                })
+                .then(registration => {
+                    if (registration.active) {
+                        console.log('ServiceWorker ready state:', registration.active.state);
+                    }
+                })
+                .catch(err => {
+                    console.error('ServiceWorker registration failed:', err);
+                });
+        }
+
+        console.log('ServiceWorker supported:', 'serviceWorker' in navigator);
+
+        // Handle offline/online status
+        window.addEventListener('online', () => {
+            document.getElementById('offline-notification').classList.add('hidden');
+        });
+
+        window.addEventListener('offline', () => {
+            document.getElementById('offline-notification').classList.remove('hidden');
+        });
+      </script>
 
    </head>
 
