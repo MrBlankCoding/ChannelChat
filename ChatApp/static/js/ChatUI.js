@@ -238,9 +238,6 @@ class ChatUI {
       messageInput.value = "";
       messageInput.style.height = "auto";
       this.exitReplyMode();
-
-      // Show temporary message immediately for better UX
-      this.showTemporaryMessage(messageData);
     }
   }
 
@@ -432,6 +429,7 @@ class ChatUI {
     const { messageContainer } = this.elements;
     const { messageRenderer } = this.services;
 
+    // Check for existing message with the same ID
     if (message.id) {
       const existingMessage = messageContainer.querySelector(
         `.message[data-message-id="${message.id}"]`
@@ -441,6 +439,37 @@ class ChatUI {
         if (message.read_by) {
           this.updateMessageReadStatus(message.id, message.read_by);
         }
+        return;
+      }
+    }
+
+    // Check for temporary message that might be a duplicate
+    // Look for temporary messages with matching content and username
+    if (!message.id.startsWith("temp-")) {
+      const tempMessages = Array.from(
+        messageContainer.querySelectorAll('.message[data-message-id^="temp-"]')
+      );
+
+      const duplicateTempMessage = tempMessages.find((tempMsg) => {
+        const tempContent = tempMsg
+          .querySelector(".message-content")
+          ?.textContent?.trim();
+        const tempUsername = tempMsg.getAttribute("data-username");
+
+        return (
+          tempUsername === message.username && tempContent === message.content
+        );
+      });
+
+      if (duplicateTempMessage) {
+        // Replace the temporary message with the confirmed one
+        duplicateTempMessage.setAttribute("data-message-id", message.id);
+
+        // Update read status if needed
+        if (message.read_by) {
+          this.updateMessageReadStatus(message.id, message.read_by);
+        }
+
         return;
       }
     }
@@ -480,18 +509,6 @@ class ChatUI {
       // Show new message notification
       this.showNewMessageNotification(message.username);
     }
-  }
-
-  showTemporaryMessage(messageData) {
-    // Create a temporary message with "sending" status
-    const tempMessage = {
-      ...messageData,
-      id: `temp-${Date.now()}`,
-      status: "sending",
-      type: "text",
-    };
-
-    this.appendMessage(tempMessage);
   }
 
   showNewMessageNotification(username) {
