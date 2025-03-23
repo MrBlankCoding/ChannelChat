@@ -1,5 +1,5 @@
 // register.js
-import { registerUser, redirectAfterLogin } from "./auth.js";
+import { registerUser, redirectAfterLogin, signInWithGoogle } from "./auth.js";
 
 document.addEventListener("DOMContentLoaded", () => {
   const registerForm = document.getElementById("registerForm");
@@ -162,6 +162,46 @@ document.addEventListener("DOMContentLoaded", () => {
       }
     });
   };
+
+    const googleSignInBtn = document.getElementById("googleSignInBtn");
+    if (googleSignInBtn) {
+      googleSignInBtn.addEventListener("click", async () => {
+        // Show loading state
+        googleSignInBtn.disabled = true;
+        loadingSpinner.classList.remove("hidden");
+
+        try {
+          // Attempt Google sign-in/registration
+          const user = await signInWithGoogle();
+
+          // If successful, redirect
+          redirectAfterLogin();
+        } catch (error) {
+          console.error("Google sign-in error:", error);
+
+          // Handle specific Firebase auth errors for Google sign-in
+          if (error.code === "auth/popup-closed-by-user") {
+            emailError.textContent = "Sign-up was cancelled.";
+          } else if (error.code === "auth/popup-blocked") {
+            emailError.textContent =
+              "Pop-up was blocked. Please allow pop-ups for this site.";
+          } else if (
+            error.code === "auth/account-exists-with-different-credential"
+          ) {
+            emailError.textContent =
+              "An account already exists with the same email address but different sign-in credentials.";
+          } else {
+            emailError.textContent =
+              "An error occurred during sign-up. Please try again.";
+          }
+          emailError.classList.remove("hidden");
+        } finally {
+          // Reset UI state
+          googleSignInBtn.disabled = false;
+          loadingSpinner.classList.add("hidden");
+        }
+      });
+    }
 
   // Function to verify the token with your backend
   const verifyRecaptchaToken = async (token) => {

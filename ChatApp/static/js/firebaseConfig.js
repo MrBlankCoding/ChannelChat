@@ -46,6 +46,8 @@ export const initFirebase = async () => {
       setPersistence,
       browserSessionPersistence,
       browserLocalPersistence,
+      GoogleAuthProvider, // Add this line
+      signInWithPopup, // Add this line
     } = await import(
       "https://www.gstatic.com/firebasejs/11.2.0/firebase-auth.js"
     );
@@ -76,9 +78,11 @@ export const initFirebase = async () => {
         updateProfile,
         sendPasswordResetEmail,
         sendEmailVerification,
-        setPersistence, // Add these three
-        browserSessionPersistence, // persistence-related
-        browserLocalPersistence, // properties
+        setPersistence,
+        browserSessionPersistence,
+        browserLocalPersistence,
+        GoogleAuthProvider, // Add this
+        signInWithPopup, // Add this
       },
       messagingUtils: { getToken, onMessage, deleteToken },
     };

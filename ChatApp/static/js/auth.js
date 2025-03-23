@@ -369,20 +369,117 @@ const updateAuthUI = (isAuthed) => {
     // Update user info display if exists
     const userDisplayName = document.getElementById("userDisplayName");
     if (userDisplayName && currentUser) {
-      userDisplayName.textContent =
-        currentUser.displayName || currentUser.email;
+      userDisplayName.textContent = currentUser.displayName || currentUser.email;
     }
 
     // Update user avatar if exists
     const userAvatar = document.getElementById("userAvatar");
-    if (userAvatar && currentUser && currentUser.photoURL) {
-      userAvatar.src = currentUser.photoURL;
-      userAvatar.alt = currentUser.displayName || "User avatar";
+    if (userAvatar && currentUser) {
+      if (currentUser.photoURL) {
+        userAvatar.src = currentUser.photoURL;
+        userAvatar.alt = currentUser.displayName || "User avatar";
+        userAvatar.classList.remove("hidden");
+      } else {
+        // Use initials or default avatar if no photo
+        const initials = (currentUser.displayName || currentUser.email.charAt(0)).charAt(0).toUpperCase();
+        userAvatar.classList.add("hidden");
+        
+        // If there's an initials element, show that instead
+        const userInitials = document.getElementById("userInitials");
+        if (userInitials) {
+          userInitials.textContent = initials;
+          userInitials.classList.remove("hidden");
+        }
+      }
     }
   } else {
     // User is signed out
     authLinks.forEach((link) => link.classList.remove("hidden"));
     profileLinks.forEach((link) => link.classList.add("hidden"));
+  }
+};
+
+export const signInWithGoogle = async () => {
+  if (!authInitialized) {
+    await initAuth();
+  }
+
+  try {
+    // Create Google auth provider
+    const googleProvider = new authUtils.GoogleAuthProvider();
+
+    // Request additional scopes for profile info and photo
+    googleProvider.addScope("profile");
+    googleProvider.addScope("email");
+
+    // Show the Google sign-in popup
+    const userCredential = await authUtils.signInWithPopup(
+      auth,
+      googleProvider
+    );
+
+    // Get user info and Google access token
+    const user = userCredential.user;
+    const credential = GoogleAuthProvider.credentialFromResult(userCredential);
+    const token = credential.accessToken;
+
+    // Extract profile information
+    const email = user.email;
+    const displayName = user.displayName || email.split("@")[0];
+    const photoURL = user.photoURL;
+
+    // Update user profile if not already set
+    if (!user.displayName || !user.photoURL) {
+      await authUtils.updateProfile(user, {
+        displayName: displayName,
+        photoURL: photoURL,
+      });
+    }
+
+    // Store profile photo URL in localStorage for quick access
+  if (photoURL) {
+    try {
+      // Upload the Google profile photo to your server
+      const serverPhotoUrl = await uploadGoogleProfilePhoto(photoURL);
+
+      // If upload successful, update the user profile with your server URL
+      if (serverPhotoUrl) {
+        await authUtils.updateProfile(user, {
+          photoURL: serverPhotoUrl,
+        });
+      }
+    } catch (err) {
+      console.error("Error processing profile photo:", err);
+      // Continue with sign-in even if photo upload fails
+    }
+  }
+
+    // Create user in backend database if it doesn't exist
+    const { default: authAxios } = await import("./authAxios.js");
+    try {
+      await authAxios.post("/users", {
+        firebase_uid: user.uid,
+        email: user.email,
+        username: displayName,
+        profile_photo_url: photoURL,
+      });
+    } catch (error) {
+      // If error is 409 (user already exists), that's fine
+      if (error.response?.status !== 409) {
+        console.error("Error creating user in backend:", error);
+      }
+    }
+
+    // Set rememberMe to true by default for Google sign-ins
+    localStorage.setItem("rememberMe", "true");
+
+    // Clear token cache on login
+    clearTokenCache();
+
+    return user;
+  } catch (error) {
+    console.error("Google sign-in error:", error);
+    throw error;
   }
 };
 
@@ -447,6 +544,50 @@ export const waitForAuthReady = (timeout = 5000) => {
       resolve(false);
     }, timeout);
   });
+};
+
+export const uploadGoogleProfilePhoto = async (photoURL) => {
+  if (!photoURL) return null;
+
+  try {
+    // Fetch the image from Google
+    const response = await fetch(photoURL);
+    const blob = await response.blob();
+
+    // Create a File object from the blob
+    const fileName = `profile-${Date.now()}.${
+      blob.type.split("/")[1] || "jpg"
+    }`;
+    const file = new File([blob], fileName, { type: blob.type });
+
+    // Create FormData
+    const formData = new FormData();
+    formData.append("file", file);
+
+    // Import authAxios to avoid circular dependencies
+    const { default: authAxios } = await import("./authAxios.js");
+
+    // Upload to your backend
+    const uploadResponse = await authAxios.post(
+      "/users/profile-photo",
+      formData,
+      {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      }
+    );
+
+    const newPhotoUrl = uploadResponse.data.profile_photo_url;
+
+    // Update local storage
+    localStorage.setItem("userPhotoURL", newPhotoUrl);
+
+    return newPhotoUrl;
+  } catch (error) {
+    console.error("Error uploading Google profile photo:", error);
+    return null;
+  }
 };
 
 // Handle protected pages with improved reliability

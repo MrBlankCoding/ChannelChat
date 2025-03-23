@@ -1,5 +1,10 @@
 // login.js
-import { loginUser, redirectAfterLogin, tryAutoLogin } from "./auth.js";
+import {
+  loginUser,
+  redirectAfterLogin,
+  tryAutoLogin,
+  signInWithGoogle,
+} from "./auth.js";
 
 document.addEventListener("DOMContentLoaded", async () => {
   // Try auto login first for PWA
@@ -123,6 +128,46 @@ document.addEventListener("DOMContentLoaded", async () => {
       window.location.href = "/login?reset=password";
     });
   }
+
+    const googleSignInBtn = document.getElementById("googleSignInBtn");
+    if (googleSignInBtn) {
+      googleSignInBtn.addEventListener("click", async () => {
+        // Show loading state
+        googleSignInBtn.disabled = true;
+        loadingSpinner.classList.remove("hidden");
+
+        try {
+          // Attempt Google sign-in
+          const user = await signInWithGoogle();
+
+          // If successful, redirect
+          redirectAfterLogin();
+        } catch (error) {
+          console.error("Google sign-in error:", error);
+
+          // Handle specific Firebase auth errors for Google sign-in
+          if (error.code === "auth/popup-closed-by-user") {
+            emailError.textContent = "Sign-in was cancelled.";
+          } else if (error.code === "auth/popup-blocked") {
+            emailError.textContent =
+              "Pop-up was blocked. Please allow pop-ups for this site.";
+          } else if (
+            error.code === "auth/account-exists-with-different-credential"
+          ) {
+            emailError.textContent =
+              "An account already exists with the same email address but different sign-in credentials.";
+          } else {
+            emailError.textContent =
+              "An error occurred during sign-in. Please try again.";
+          }
+          emailError.classList.remove("hidden");
+        } finally {
+          // Reset UI state
+          googleSignInBtn.disabled = false;
+          loadingSpinner.classList.add("hidden");
+        }
+      });
+    }
 
   // Handle reset password form if it exists
   const resetForm = document.getElementById("resetPasswordForm");
