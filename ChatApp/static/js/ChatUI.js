@@ -6,118 +6,152 @@ import ChatManager from "./ChatManager.js";
 class ChatUI {
   constructor(options = {}) {
     // DOM Elements
-    this.messagesContainer = document.querySelector("#messagesContainer");
-    this.messageContainer = document.querySelector("#messages");
-    this.loadingSpinner = document.querySelector("#loadingSpinner");
-    this.messageForm = document.querySelector("#messageForm");
-    this.messageInput = document.querySelector("#messageInput");
-    this.roomNameElement = document.querySelector("#roomName");
-    this.roomCodeElement = document.querySelector("#roomCode");
-    this.inputWrapper = this.messageForm.querySelector(".input-wrapper");
-    this.imageInput = document.querySelector("#imageInput");
+    this.elements = {
+      messagesContainer: document.querySelector("#messagesContainer"),
+      messageContainer: document.querySelector("#messages"),
+      loadingSpinner: document.querySelector("#loadingSpinner"),
+      messageForm: document.querySelector("#messageForm"),
+      messageInput: document.querySelector("#messageInput"),
+      roomNameElement: document.querySelector("#roomName"),
+      roomCodeElement: document.querySelector("#roomCode"),
+      imageInput: document.querySelector("#imageInput"),
+      typingIndicator: null,
+    };
+
+    this.inputWrapper =
+      this.elements.messageForm.querySelector(".input-wrapper");
 
     // Services & Utilities
-    this.wsManager = WebSocketManager.getInstance();
-    this.chatManager = ChatManager.instance;
-    this.messageRenderer = new MessageRenderer();
-    this.imageGallery = new ImageGallery();
-    this.loadingMoreIndicator = this.createLoadingMoreIndicator();
+    this.services = {
+      wsManager: WebSocketManager.getInstance(),
+      chatManager: ChatManager.instance,
+      messageRenderer: new MessageRenderer(),
+      imageGallery: new ImageGallery(),
+    };
 
     // State
-    this.isScrolledToBottom = true;
-    this.lastMessageUsername = null;
-    this.replyingTo = null;
-    this.currentUsername = null;
-    this.typingUsers = new Set();
-    this.typingTimeout = null;
+    this.state = {
+      isScrolledToBottom: true,
+      lastMessageUsername: null,
+      replyingTo: null,
+      currentUsername: null,
+      typingUsers: new Set(),
+      typingTimeout: null,
+    };
 
-    // Initialize components
+    this.loadingMoreIndicator = this.createLoadingMoreIndicator();
+
+    // Initialize UI
+    this.init();
+  }
+
+  // Initialization methods
+  init() {
     this.setupEventListeners();
     this.setupTypingIndicator();
     this.setupImageUpload();
+    this.createScrollIndicator();
   }
 
-  // Core initialization methods
   setupEventListeners() {
+    const { messageContainer, messageForm } = this.elements;
+
     // Scroll handling
-    this.messageContainer.addEventListener("scroll", () => {
-      this.isScrolledToBottom = this.isNearBottom();
-      this.updateScrollIndicator();
-    });
+    messageContainer.addEventListener("scroll", this.handleScroll.bind(this));
 
     // Message form submission
-    this.messageForm.addEventListener("submit", (e) =>
-      this.handleMessageSubmit(e)
-    );
+    messageForm.addEventListener("submit", this.handleMessageSubmit.bind(this));
 
     // Image gallery handling
-    this.messageContainer.addEventListener("click", (e) => {
-      const clickedImage = e.target.closest(".message-image-container img");
-      if (clickedImage) {
-        e.preventDefault();
-        this.imageGallery.show(clickedImage.src);
-      }
-    });
+    messageContainer.addEventListener(
+      "click",
+      this.handleImageClick.bind(this)
+    );
 
-    // Message actions (reactions, replies, edits, deletes)
+    // Message actions
     this.setupMessageActionListeners();
+
+    // Input auto-resize
+    this.setupAutoResizeInput();
+  }
+
+  setupAutoResizeInput() {
+    const { messageInput } = this.elements;
+
+    messageInput.addEventListener("input", () => {
+      messageInput.style.height = "auto";
+      messageInput.style.height = `${messageInput.scrollHeight}px`;
+    });
   }
 
   setupMessageActionListeners() {
-    // Reaction handling
-    this.messageContainer.addEventListener("click", (e) => {
-      const reactionBtn = e.target.closest(".reaction-btn");
-      const addReactionBtn = e.target.closest(".add-reaction-btn");
-      if (reactionBtn || addReactionBtn) {
-        const messageElement = (reactionBtn || addReactionBtn).closest(
-          ".message"
-        );
+    const { messageContainer } = this.elements;
+
+    // Delegate event handlers for message actions
+    messageContainer.addEventListener("click", (e) => {
+      // Handle reactions
+      if (
+        e.target.closest(".reaction-btn") ||
+        e.target.closest(".add-reaction-btn")
+      ) {
+        const messageElement = e.target.closest(".message");
         e.stopPropagation();
         this.showEmojiPicker(messageElement);
+        return;
       }
-    });
 
-    // Message manipulation buttons
-    this.messageContainer.addEventListener("click", (e) => {
-      const replyBtn = e.target.closest(".reply-message-btn");
-      const editBtn = e.target.closest(".edit-message-btn");
-      const deleteBtn = e.target.closest(".delete-message-btn");
-      const cancelReplyBtn = e.target.closest(".cancel-reply-btn");
+      // Handle message manipulation buttons
+      const actionButton = e.target.closest(
+        ".reply-message-btn, .edit-message-btn, .delete-message-btn, .cancel-reply-btn"
+      );
+      if (!actionButton) return;
 
-      if (replyBtn) {
-        this.setupReplyMode(replyBtn.closest(".message"));
-      } else if (cancelReplyBtn) {
+      const messageElement = actionButton.closest(".message");
+
+      if (actionButton.classList.contains("reply-message-btn")) {
+        this.setupReplyMode(messageElement);
+      } else if (actionButton.classList.contains("cancel-reply-btn")) {
         this.exitReplyMode();
-      } else if (editBtn) {
-        this.setupEditMode(editBtn.closest(".message"));
-      } else if (deleteBtn) {
-        const messageElement = deleteBtn.closest(".message");
-        const messageId = messageElement.dataset.messageId;
-
-        if (confirm("Are you sure you want to delete this message?")) {
-          this.chatManager.deleteMessage(messageId);
-        }
+      } else if (actionButton.classList.contains("edit-message-btn")) {
+        this.setupEditMode(messageElement);
+      } else if (actionButton.classList.contains("delete-message-btn")) {
+        this.handleDeleteMessage(messageElement);
       }
     });
   }
 
+  handleDeleteMessage(messageElement) {
+    const messageId = messageElement.dataset.messageId;
+
+    if (confirm("Are you sure you want to delete this message?")) {
+      this.services.chatManager.deleteMessage(messageId);
+    }
+  }
+
   setupTypingIndicator() {
+    const { messageContainer, messageInput } = this.elements;
+    const { chatManager } = this.services;
+
+    // Create typing indicator element
     const typingContainer = document.createElement("div");
     typingContainer.id = "typingIndicator";
     typingContainer.className =
-      "hidden px-4 py-2 text-sm text-slate-500 dark:text-slate-400 italic";
-    this.messageContainer.parentNode.insertBefore(
+      "hidden px-4 py-2 text-sm text-slate-500 dark:text-slate-400 italic transition-opacity duration-300";
+    messageContainer.parentNode.insertBefore(
       typingContainer,
-      this.messageContainer.nextSibling
+      messageContainer.nextSibling
     );
 
-    this.messageInput.addEventListener("input", () => {
-      if (this.chatManager) {
-        clearTimeout(this.typingTimeout);
-        this.chatManager.sendTypingStatus(true);
+    this.elements.typingIndicator = typingContainer;
 
-        this.typingTimeout = setTimeout(() => {
-          this.chatManager.sendTypingStatus(false);
+    // Handle typing events
+    messageInput.addEventListener("input", () => {
+      if (chatManager) {
+        clearTimeout(this.state.typingTimeout);
+        chatManager.sendTypingStatus(true);
+
+        this.state.typingTimeout = setTimeout(() => {
+          chatManager.sendTypingStatus(false);
         }, 2000);
       }
     });
@@ -125,217 +159,281 @@ class ChatUI {
 
   setupImageUpload() {
     const uploadButton = document.getElementById("imageUploadButton");
+    const { imageInput } = this.elements;
+    const { chatManager } = this.services;
+
     if (!uploadButton) {
       console.error("Image upload button not found.");
       return;
     }
 
-    uploadButton.addEventListener("click", () => this.imageInput.click());
-    this.imageInput.addEventListener("change", (e) => {
+    uploadButton.addEventListener("click", () => imageInput.click());
+
+    imageInput.addEventListener("change", (e) => {
       if (e.target.files.length > 0) {
-        this.chatManager.handleImageUpload(e.target.files);
+        chatManager.handleImageUpload(e.target.files);
         e.target.value = "";
       }
     });
   }
 
+  createScrollIndicator() {
+    const { messagesContainer } = this.elements;
+
+    const indicator = document.createElement("button");
+    indicator.id = "scrollIndicator";
+    indicator.className =
+      "hidden fixed bottom-24 right-8 bg-blue-500 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg hover:bg-blue-600 transition-all transform hover:scale-105 z-10";
+    indicator.innerHTML = '<i class="fas fa-arrow-down"></i>';
+    indicator.addEventListener("click", () => this.scrollToBottom(true));
+
+    messagesContainer.appendChild(indicator);
+  }
+
+  // Event handlers
+  handleScroll() {
+    const { messageContainer } = this.elements;
+
+    // Check if we're at the top for loading more messages
+    if (messageContainer.scrollTop < 50) {
+      this.services.chatManager.loadMoreMessages();
+    }
+
+    // Update scroll state
+    this.state.isScrolledToBottom = this.isNearBottom();
+    this.updateScrollIndicator();
+  }
+
+  handleImageClick(e) {
+    const clickedImage = e.target.closest(".message-image-container img");
+    if (clickedImage) {
+      e.preventDefault();
+      this.services.imageGallery.show(clickedImage.src);
+    }
+  }
+
+  handleMessageSubmit(e) {
+    e.preventDefault();
+    const { messageInput } = this.elements;
+    const { wsManager, chatManager } = this.services;
+    const { replyingTo, currentUsername } = this.state;
+
+    const content = messageInput.value.trim();
+
+    if (content && wsManager.isWebSocketOpen()) {
+      const messageData = {
+        content,
+        username: currentUsername,
+        timestamp: new Date().toISOString(),
+        replyTo: replyingTo
+          ? {
+              id: replyingTo.id,
+              content: replyingTo.content,
+              username: replyingTo.username,
+            }
+          : null,
+      };
+
+      chatManager.sendMessage(messageData);
+      messageInput.value = "";
+      messageInput.style.height = "auto";
+      this.exitReplyMode();
+
+      // Show temporary message immediately for better UX
+      this.showTemporaryMessage(messageData);
+    }
+  }
+
   // UI state management
   setCurrentUser(user) {
-    this.currentUsername = user.username;
-    this.messageRenderer.setCurrentUser(user);
+    this.state.currentUsername = user.username;
+    this.services.messageRenderer.setCurrentUser(user);
   }
 
   setChatManager(chatManager) {
-    this.chatManager = chatManager;
+    this.services.chatManager = chatManager;
   }
 
   setLoading(isLoading) {
-    this.loadingSpinner.classList.toggle("hidden", !isLoading);
-    this.messagesContainer.classList.toggle("hidden", isLoading);
-    this.messageForm.classList.toggle("hidden", isLoading);
+    const { loadingSpinner, messagesContainer, messageForm } = this.elements;
+
+    loadingSpinner.classList.toggle("hidden", !isLoading);
+    messagesContainer.classList.toggle("hidden", isLoading);
+    messageForm.classList.toggle("hidden", isLoading);
   }
 
   enableForm(isEnabled) {
-    this.messageInput.disabled = !isEnabled;
-    this.messageForm.querySelector("button").disabled = !isEnabled;
+    const { messageInput, messageForm } = this.elements;
+
+    messageInput.disabled = !isEnabled;
+    messageForm.querySelector("button").disabled = !isEnabled;
   }
 
   updateRoomInfo(room) {
-    this.roomNameElement.textContent = room.name;
-    this.roomCodeElement.setAttribute("data-code", room.code);
+    const { roomNameElement, roomCodeElement } = this.elements;
+
+    roomNameElement.textContent = room.name;
+    roomCodeElement.setAttribute("data-code", room.code);
     document.title = `Channel Chat - ${room.name}`;
+
+    // Add room joining animation
+    roomNameElement.classList.add("pulse-animation");
+    setTimeout(() => roomNameElement.classList.remove("pulse-animation"), 1000);
   }
 
   // Scroll handling
   isNearBottom() {
+    const { messageContainer } = this.elements;
     const threshold = 100;
+
     return (
-      this.messageContainer.scrollHeight -
-        this.messageContainer.scrollTop -
-        this.messageContainer.clientHeight <
+      messageContainer.scrollHeight -
+        messageContainer.scrollTop -
+        messageContainer.clientHeight <
       threshold
     );
   }
 
   scrollToBottom(force = false) {
-    if (force || this.isScrolledToBottom) {
-      if (this.messageContainer) {
-        this.messageContainer.scrollTop = this.messageContainer.scrollHeight;
-        this.isScrolledToBottom = true;
-        this.updateScrollIndicator();
-      }
+    const { messageContainer } = this.elements;
+
+    if ((force || this.state.isScrolledToBottom) && messageContainer) {
+      messageContainer.scrollTop = messageContainer.scrollHeight;
+      this.state.isScrolledToBottom = true;
+      this.updateScrollIndicator();
     }
   }
 
   updateScrollIndicator() {
     const indicator = document.getElementById("scrollIndicator");
     if (indicator) {
-      indicator.classList.toggle("hidden", this.isScrolledToBottom);
+      if (this.state.isScrolledToBottom) {
+        indicator.classList.add("hidden");
+      } else {
+        indicator.classList.remove("hidden");
+        indicator.classList.add("bounce-animation");
+        setTimeout(() => indicator.classList.remove("bounce-animation"), 1000);
+      }
     }
   }
 
-  // Message handling
-  handleMessageSubmit(e) {
-    e.preventDefault();
-    const content = this.messageInput.value.trim();
-
-    if (content && this.wsManager.isWebSocketOpen()) {
-      const messageData = {
-        content,
-        username: this.currentUsername,
-        timestamp: new Date().toISOString(),
-        replyTo: this.replyingTo
-          ? {
-              id: this.replyingTo.id,
-              content: this.replyingTo.content,
-              username: this.replyingTo.username,
-            }
-          : null,
-      };
-
-      this.chatManager.sendMessage(messageData);
-      this.messageInput.value = "";
-      this.messageInput.style.height = "auto";
-      this.exitReplyMode();
-    }
-  }
-
-  updateTypingIndicator(typingUsers) {
-    const container = document.getElementById("typingIndicator");
-    if (!container) return;
-
-    // Convert to array if it's a Set
-    const usersArray = Array.isArray(typingUsers)
-      ? typingUsers
-      : Array.from(typingUsers);
-
-    // Filter out current user
-    const otherTypingUsers = usersArray.filter(
-      (userId) => userId !== this.currentUsername
-    );
-
-    if (otherTypingUsers.length === 0) {
-      container.classList.add("hidden");
-      return;
-    }
-
-    let message = "";
-    if (otherTypingUsers.length === 1) {
-      message = `${otherTypingUsers[0]} is typing...`;
-    } else if (otherTypingUsers.length === 2) {
-      message = `${otherTypingUsers[0]} and ${otherTypingUsers[1]} are typing...`;
-    } else {
-      message = "Several people are typing...";
-    }
-
-    container.textContent = message;
-    container.classList.remove("hidden");
-  }
-
+  // Message operations
   clearMessages() {
-    this.messageContainer.innerHTML = "";
+    const { messageContainer } = this.elements;
+    messageContainer.innerHTML = "";
+  }
+
+  normalizeMessage(message) {
+    // Ensure consistent message structure
+    return {
+      id: message.id || `temp-${Date.now()}`,
+      username: message.username || "Anonymous",
+      content: message.content || "",
+      timestamp: message.timestamp || new Date().toISOString(),
+      type: message.type || "text",
+      status: message.status || "sent",
+      edited: !!message.edited,
+      read_by: Array.isArray(message.read_by) ? message.read_by : [],
+
+      // Handle reply data if present
+      reply_to: message.reply_to
+        ? {
+            message_id: message.reply_to.message_id || message.reply_to.id,
+            content: message.reply_to.content || "",
+            username: message.reply_to.username || "Anonymous",
+          }
+        : message.replyTo
+        ? {
+            message_id: message.replyTo.id,
+            content: message.replyTo.content || "",
+            username: message.replyTo.username || "Anonymous",
+          }
+        : null,
+
+      // Handle reactions
+      reactions: message.reactions || [],
+
+      // Handle image data if present
+      image_url: message.image_url || message.imageUrl || null,
+    };
   }
 
   async displayMessages(messages) {
-    if (!this.messageContainer) return;
+    const { messageContainer } = this.elements;
+    const { messageRenderer } = this.services;
 
-    this.messageContainer.innerHTML = "";
-    this.lastMessageUsername = null;
+    if (!messageContainer) return;
+
+    messageContainer.innerHTML = "";
+    this.state.lastMessageUsername = null;
+
+    const fragment = document.createDocumentFragment();
 
     for (const message of messages) {
-      const processedMessage = {
-        ...message,
-        type:
-          message.type ||
-          (message.content?.includes("firebasestorage.googleapis.com")
-            ? "image"
-            : "text"),
-      };
+      const processedMessage = this.normalizeMessage(message);
+      const showHeader =
+        processedMessage.username !== this.state.lastMessageUsername;
 
-      const showHeader = processedMessage.username !== this.lastMessageUsername;
-      const messageElement = await this.messageRenderer.createMessageElement(
+      const messageElement = await messageRenderer.createMessageElement(
         processedMessage,
         showHeader
       );
 
-      this.messageContainer.appendChild(messageElement);
-      this.lastMessageUsername = processedMessage.username;
+      fragment.appendChild(messageElement);
+      this.state.lastMessageUsername = processedMessage.username;
     }
 
+    messageContainer.appendChild(fragment);
     this.scrollToBottom();
   }
 
   async prependMessages(messages) {
-    if (!this.messageContainer) return;
+    const { messageContainer } = this.elements;
+    const { messageRenderer } = this.services;
+
+    if (!messageContainer) return;
 
     const scrollBottom =
-      this.messageContainer.scrollHeight - this.messageContainer.scrollTop;
-    const tempLastMessageUsername = this.lastMessageUsername;
-    this.lastMessageUsername = null;
+      messageContainer.scrollHeight - messageContainer.scrollTop;
+    const tempLastMessageUsername = this.state.lastMessageUsername;
+    this.state.lastMessageUsername = null;
+
+    // Use document fragment for better performance
+    const fragment = document.createDocumentFragment();
 
     for (const message of messages.reverse()) {
-      const processedMessage = {
-        ...message,
-        type:
-          message.type ||
-          (message.content?.includes("firebasestorage.googleapis.com")
-            ? "image"
-            : "text"),
-      };
+      const processedMessage = this.normalizeMessage(message);
+      const showHeader =
+        processedMessage.username !== this.state.lastMessageUsername;
 
-      const showHeader = processedMessage.username !== this.lastMessageUsername;
-      const messageElement = await this.messageRenderer.createMessageElement(
+      const messageElement = await messageRenderer.createMessageElement(
         processedMessage,
         showHeader
       );
 
-      const insertAfter =
-        this.loadingMoreIndicator &&
-        this.loadingMoreIndicator.parentElement === this.messageContainer
-          ? this.loadingMoreIndicator.nextSibling
-          : null;
-
-      if (insertAfter) {
-        this.messageContainer.insertBefore(messageElement, insertAfter);
-      } else {
-        this.messageContainer.insertBefore(
-          messageElement,
-          this.messageContainer.firstChild
-        );
-      }
-
-      this.lastMessageUsername = processedMessage.username;
+      fragment.appendChild(messageElement);
+      this.state.lastMessageUsername = processedMessage.username;
     }
 
-    this.lastMessageUsername = tempLastMessageUsername;
-    this.messageContainer.scrollTop =
-      this.messageContainer.scrollHeight - scrollBottom;
+    const insertAfter =
+      this.loadingMoreIndicator?.parentElement === messageContainer
+        ? this.loadingMoreIndicator.nextSibling
+        : messageContainer.firstChild;
+
+    messageContainer.insertBefore(fragment, insertAfter);
+    this.state.lastMessageUsername = tempLastMessageUsername;
+
+    // Maintain scroll position
+    messageContainer.scrollTop = messageContainer.scrollHeight - scrollBottom;
     this.showLoadingMore(false);
   }
 
   async appendMessage(message) {
+    const { messageContainer } = this.elements;
+    const { messageRenderer } = this.services;
+
     if (message.id) {
-      const existingMessage = this.messageContainer.querySelector(
+      const existingMessage = messageContainer.querySelector(
         `.message[data-message-id="${message.id}"]`
       );
 
@@ -349,8 +447,9 @@ class ChatUI {
 
     const tempId = message.id || `temp-${Date.now()}`;
     const shouldScroll = this.isNearBottom();
-    const showHeader = message.username !== this.lastMessageUsername;
+    const showHeader = message.username !== this.state.lastMessageUsername;
 
+    // Process reply data
     const reply_to = message.reply_to
       ? {
           message_id: message.reply_to.id || message.reply_to.message_id,
@@ -359,7 +458,8 @@ class ChatUI {
         }
       : null;
 
-    const messageElement = await this.messageRenderer.createMessageElement(
+    // Create message element
+    const messageElement = await messageRenderer.createMessageElement(
       {
         ...message,
         id: tempId,
@@ -368,12 +468,56 @@ class ChatUI {
       showHeader
     );
 
-    this.messageContainer.appendChild(messageElement);
-    this.lastMessageUsername = message.username;
+    // Add slide-in animation
+    messageElement.classList.add("slide-in-animation");
 
-    if (shouldScroll || message.username !== this.currentUsername) {
+    messageContainer.appendChild(messageElement);
+    this.state.lastMessageUsername = message.username;
+
+    if (shouldScroll || message.username === this.state.currentUsername) {
       this.scrollToBottom(true);
+    } else {
+      // Show new message notification
+      this.showNewMessageNotification(message.username);
     }
+  }
+
+  showTemporaryMessage(messageData) {
+    // Create a temporary message with "sending" status
+    const tempMessage = {
+      ...messageData,
+      id: `temp-${Date.now()}`,
+      status: "sending",
+      type: "text",
+    };
+
+    this.appendMessage(tempMessage);
+  }
+
+  showNewMessageNotification(username) {
+    const notification = document.createElement("div");
+    notification.className =
+      "fixed bottom-16 right-8 bg-blue-500 text-white px-4 py-2 rounded-lg shadow-lg z-50 notification-animation";
+    notification.innerHTML = `
+      <div class="flex items-center gap-2">
+        <i class="fas fa-comment-dots"></i>
+        <span>New message from ${username}</span>
+      </div>
+    `;
+
+    notification.addEventListener("click", () => {
+      this.scrollToBottom(true);
+      notification.remove();
+    });
+
+    document.body.appendChild(notification);
+
+    setTimeout(() => {
+      notification.classList.add("fade-out");
+      notification.addEventListener("animationend", () =>
+        notification.remove()
+      );
+    }, 3000);
   }
 
   // Message editing & reactions
@@ -388,15 +532,25 @@ class ChatUI {
     editForm.innerHTML = `
       <input type="text" class="flex-grow px-2 py-1 rounded border border-slate-300 dark:border-slate-600 text-sm text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-700" 
              value="${this.escapeHtml(currentContent)}">
-      <button type="submit" class="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300">
-          <i class="fas fa-check"></i>
-      </button>
-      <button type="button" class="cancel-edit text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300">
-          <i class="fas fa-times"></i>
-      </button>
+      <div class="flex gap-1">
+        <button type="submit" class="text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
+            <i class="fas fa-check"></i>
+        </button>
+        <button type="button" class="cancel-edit text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-600 transition-colors">
+            <i class="fas fa-times"></i>
+        </button>
+      </div>
     `;
 
-    contentDiv.replaceWith(editForm);
+    // Add smooth transition
+    contentDiv.style.opacity = 0;
+    setTimeout(() => {
+      contentDiv.replaceWith(editForm);
+      editForm.style.opacity = 0;
+      setTimeout(() => {
+        editForm.style.opacity = 1;
+      }, 10);
+    }, 150);
 
     const input = editForm.querySelector("input");
     input.focus();
@@ -407,7 +561,7 @@ class ChatUI {
       const newContent = input.value.trim();
       if (newContent && newContent !== currentContent) {
         const messageId = messageElement.dataset.messageId;
-        await this.chatManager.editMessage(messageId, newContent);
+        await this.services.chatManager.editMessage(messageId, newContent);
       }
       this.exitEditMode(messageElement, newContent || currentContent);
     });
@@ -422,7 +576,16 @@ class ChatUI {
     const contentDiv = document.createElement("div");
     contentDiv.className = "text-sm message-content";
     contentDiv.textContent = content;
-    editForm.replaceWith(contentDiv);
+
+    // Animation for smooth transition
+    editForm.style.opacity = 0;
+    setTimeout(() => {
+      editForm.replaceWith(contentDiv);
+      contentDiv.style.opacity = 0;
+      setTimeout(() => {
+        contentDiv.style.opacity = 1;
+      }, 10);
+    }, 150);
   }
 
   updateMessage(messageId, content, edited = true) {
@@ -432,14 +595,24 @@ class ChatUI {
 
     if (messageEl) {
       const contentDiv = messageEl.querySelector(".message-content");
-      contentDiv.textContent = content;
 
-      if (edited && !contentDiv.textContent.includes("(edited)")) {
-        contentDiv.insertAdjacentHTML(
-          "beforeend",
-          '<span class="text-xs text-slate-400 ml-2">(edited)</span>'
-        );
-      }
+      // Add animation
+      contentDiv.classList.add("fade-update");
+
+      setTimeout(() => {
+        contentDiv.textContent = content;
+
+        if (edited && !contentDiv.textContent.includes("(edited)")) {
+          contentDiv.insertAdjacentHTML(
+            "beforeend",
+            '<span class="text-xs text-slate-400 ml-2 italic">(edited)</span>'
+          );
+        }
+
+        setTimeout(() => {
+          contentDiv.classList.remove("fade-update");
+        }, 300);
+      }, 300);
     }
   }
 
@@ -449,9 +622,9 @@ class ChatUI {
     );
 
     if (messageEl) {
-      // Add fade-out animation before removing
-      messageEl.classList.add("fade-out");
-      setTimeout(() => messageEl.remove(), 300);
+      // Improved animation
+      messageEl.classList.add("message-delete-animation");
+      messageEl.addEventListener("animationend", () => messageEl.remove());
     }
   }
 
@@ -462,14 +635,10 @@ class ChatUI {
       .textContent.replace("(edited)", "")
       .trim();
 
-    let username = messageElement.getAttribute("data-username");
-
-    if (!username) {
-      const headerUsername = messageElement.querySelector(".font-semibold");
-      username = headerUsername
-        ? headerUsername.textContent.trim()
-        : this.currentUsername;
-    }
+    let username =
+      messageElement.getAttribute("data-username") ||
+      messageElement.querySelector(".font-semibold")?.textContent.trim() ||
+      this.state.currentUsername;
 
     if (!messageId || !content) {
       console.error("Missing required reply data:", {
@@ -480,15 +649,15 @@ class ChatUI {
       return;
     }
 
-    this.replyingTo = { id: messageId, content, username };
-    this.messageForm.querySelector(".reply-preview")?.remove();
+    this.state.replyingTo = { id: messageId, content, username };
+    this.elements.messageForm.querySelector(".reply-preview")?.remove();
 
     const replyPreview = document.createElement("div");
     replyPreview.className =
-      "reply-preview bg-slate-100 dark:bg-slate-700 p-2 rounded-lg mb-2 flex items-center justify-between";
+      "reply-preview bg-slate-100 dark:bg-slate-700 p-2 rounded-lg mb-2 flex items-center justify-between border-l-4 border-blue-500 dark:border-blue-400";
     replyPreview.innerHTML = `
       <div class="flex items-center gap-2">
-        <i class="fas fa-reply text-slate-400 dark:text-slate-500"></i>
+        <i class="fas fa-reply text-blue-500 dark:text-blue-400"></i>
         <span class="text-sm text-slate-600 dark:text-slate-300">
           Replying to <span class="font-semibold">${this.escapeHtml(
             username
@@ -499,7 +668,7 @@ class ChatUI {
           )}</span>
         </span>
       </div>
-      <button type="button" class="cancel-reply-btn text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300">
+      <button type="button" class="cancel-reply-btn text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
         <i class="fas fa-times"></i>
       </button>
     `;
@@ -513,18 +682,32 @@ class ChatUI {
     });
 
     this.inputWrapper.parentNode.insertBefore(replyPreview, this.inputWrapper);
-    this.messageInput.focus();
+    this.elements.messageInput.focus();
+
+    // Scroll message into view and highlight it
+    const replyMessageEl = document.querySelector(
+      `.message[data-message-id="${messageId}"]`
+    );
+    if (replyMessageEl) {
+      replyMessageEl.scrollIntoView({ behavior: "smooth", block: "center" });
+      replyMessageEl.classList.add("highlight-message");
+      setTimeout(
+        () => replyMessageEl.classList.remove("highlight-message"),
+        1500
+      );
+    }
   }
 
   exitReplyMode() {
-    const replyPreview = this.messageForm.querySelector(".reply-preview");
+    const replyPreview =
+      this.elements.messageForm.querySelector(".reply-preview");
     if (replyPreview) {
       replyPreview.style.animation = "slideUp 0.2s ease-out";
       replyPreview.addEventListener("animationend", () => {
         replyPreview.remove();
       });
     }
-    this.replyingTo = null;
+    this.state.replyingTo = null;
   }
 
   updateMessageReactions(messageId, emoji, username) {
@@ -545,14 +728,17 @@ class ChatUI {
       const currentCount = parseInt(countEl.textContent) || 0;
       countEl.textContent = currentCount + 1;
 
-      // Add pulse animation
-      reactionEl.classList.add("pulse-animation");
-      setTimeout(() => reactionEl.classList.remove("pulse-animation"), 500);
+      // Enhanced pulse animation
+      reactionEl.classList.add("reaction-pulse-animation");
+      setTimeout(
+        () => reactionEl.classList.remove("reaction-pulse-animation"),
+        500
+      );
     } else {
       // Create new reaction with pop-in animation
       const newReactionEl = document.createElement("div");
       newReactionEl.className =
-        "emoji-reaction inline-flex items-center mr-2 px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-sm pop-in-animation";
+        "emoji-reaction inline-flex items-center mr-2 px-2 py-1 rounded-full bg-slate-100 dark:bg-slate-700 text-sm hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors cursor-pointer reaction-pop-animation";
       newReactionEl.innerHTML = `
         <span class="mr-1">${emoji}</span>
         <span class="text-xs text-slate-600 dark:text-slate-300">1</span>
@@ -571,7 +757,7 @@ class ChatUI {
     if (!messageEl) return;
 
     const username = messageEl.getAttribute("data-username");
-    if (username !== this.currentUsername) return;
+    if (username !== this.state.currentUsername) return;
 
     const readReceiptContainer = messageEl.querySelector(
       ".read-receipt-container"
@@ -581,7 +767,7 @@ class ChatUI {
 
     const readers = Array.isArray(readBy) ? readBy : [readBy];
     const otherReaders = readers.filter(
-      (reader) => reader !== this.currentUsername
+      (reader) => reader !== this.state.currentUsername
     );
     const totalReaders = otherReaders.length;
 
