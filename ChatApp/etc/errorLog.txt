@@ -1,16 +1,3 @@
-Rate limiting
-connection health cheks to detect and recover from "zombie" connections
-message queue
-websocket compression
-import connection tracking
-remove notfactions when they are read
-name searching for freinds
-
-
-
-
-Add websocket to dashboard
-split backend into mutiple files
-
-
-npx @tailwindcss/cli -i ./static/css/input.css -o ./static/css/output.css --watch
+1. Fix showing typing 
+2. Fix reacting
+3 Fix messages not deleteing

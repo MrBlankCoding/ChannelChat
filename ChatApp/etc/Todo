@@ -1,6 +1,5 @@
 # **🚀 Chat App To-Do List**  
-Have the dashboard page connect to the websocket for realtime friend status updates and for preformance when loading into the main chat. 
-Fix unread badge 
+
 ## **🔔 Notifications & Sidebar Enhancements**  
 - [ ] **Room Notifications** – Indicate unread messages from other rooms in the sidebar.  
 
@@ -19,11 +18,6 @@ Fix unread badge
 
 ---
 
-## **🤝 Friend Requests**  
-- [ ] **Remove Declined Requests** – Automatically delete declined friend requests from the database.  
-
----
-
 ## **⚡ Redis Integration**  
 - [ ] **Implement Redis** – Use Redis for caching and performance improvements.  
 
@@ -38,8 +32,6 @@ Fix unread badge
 
 ## **🎨 UI/UX Enhancements**  
 - [ ] **Room Profile Images** – Allow users to set profile images for rooms.  
-- [ ] **Room Invitations** – Add functionality to invite friends to rooms.  
-- [ ] **User Search Suggestions** – Show friend name suggestions when searching for users.  
 
 ---
 
@@ -49,6 +41,3 @@ Fix unread badge
 - [ ] **Buy Domain** – Purchase and configure a custom domain.  
 - [ ] **Add Images** – Ensure all necessary images are included in production.  
 
-
-move profile photo to bottom message
-dock your messages to the side

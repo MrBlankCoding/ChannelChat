@@ -2,6 +2,52 @@ import PresenceManager from "./PresenceManager.js";
 import { getAuthToken } from "./auth.js";
 
 /**
+ * Constants for WebSocketManager configuration
+ */
+const WS_CONFIG = {
+  MAX_RECONNECT_ATTEMPTS: 5,
+  INITIAL_RECONNECT_DELAY_MS: 1000,
+  CONNECTION_TIMEOUT_MS: 10000,
+  HEARTBEAT_INTERVAL_MS: 30000,
+  ROOM_SWITCH_TIMEOUT_MS: 5000,
+  TYPING_DEBOUNCE_MS: 300,
+  MESSAGE_QUEUE_PROCESS_INTERVAL_MS: 50,
+  MAX_PROCESSED_MESSAGES: 1000
+};
+
+/**
+ * WebSocket connection states
+ */
+const CONNECTION_STATES = {
+  DISCONNECTED: 'disconnected',
+  CONNECTING: 'connecting',
+  CONNECTED: 'connected',
+  BASE_VIEW: 'base_view'
+};
+
+/**
+ * Message types
+ */
+const MESSAGE_TYPES = {
+  TEXT: 'text',
+  MESSAGE: 'message',
+  TYPING_STATUS: 'typing_status',
+  READ_RECEIPT: 'read_receipt',
+  PRESENCE_UPDATE: 'presence_update',
+  ROOM_SWITCH: 'room_switch',
+  ROOM_SWITCH_SUCCESS: 'room_switch_success',
+  ROOM_SWITCH_ERROR: 'room_switch_error',
+  GET_ROOMS: 'get_rooms',
+  EDIT_MESSAGE: 'edit_message',
+  DELETE_MESSAGE: 'delete_message',
+  ADD_EMOJI_REACTION: 'add_emoji_reaction',
+  CONNECTION_STATUS: 'connection_status',
+  ERROR: 'error',
+  PING: 'ping',
+  PONG: 'pong'
+};
+
+/**
  * Manages WebSocket connections and message handling
  */
 class WebSocketManager {
@@ -11,15 +57,31 @@ class WebSocketManager {
     }
     WebSocketManager.instance = this;
 
+    this._initializeProperties();
+    this._bindMethods();
+    this._setupEventListeners();
+    this._startMessageQueueProcessing();
+  }
+
+  /**
+   * Returns the singleton instance of WebSocketManager
+   */
+  static getInstance() {
+    return WebSocketManager.instance || new WebSocketManager();
+  }
+
+  /**
+   * Initialize instance properties
+   * @private
+   */
+  _initializeProperties() {
     // Connection properties
     this.ws = null;
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
-    this.reconnectBackoffMs = 1000;
-    this.connectionState = "disconnected";
+    this.connectionState = CONNECTION_STATES.DISCONNECTED;
     this.connectionPromise = null;
     this.heartbeatInterval = null;
-    this.heartbeatTimeoutMs = 30000;
+    this.originalTitle = document.title;
 
     // User and room context
     this.currentUser = null;
@@ -33,11 +95,9 @@ class WebSocketManager {
     this.messageCounter = 0;
     this.processedMessages = new Set();
     this.typingDebounceTimer = null;
-    this.typingDebounceMs = 300;
 
     // Room switching
     this.roomSwitchCallbacks = new Map();
-    this.roomSwitchTimeoutMs = 5000;
     this.switchingRoom = false;
 
     // Tab focus tracking
@@ -47,31 +107,50 @@ class WebSocketManager {
     // Initialize PresenceManager
     this.presenceManager = PresenceManager.getInstance();
     this.presenceManager.onStatusChange(this.handlePresenceChange.bind(this));
+  }
 
-    // Bind methods to preserve 'this' context
+  /**
+   * Bind methods to preserve 'this' context
+   * @private
+   */
+  _bindMethods() {
     this.handleWebSocketMessage = this.handleWebSocketMessage.bind(this);
     this.handleVisibilityChange = this.handleVisibilityChange.bind(this);
     this.processMessageQueue = this.processMessageQueue.bind(this);
     this.sendHeartbeat = this.sendHeartbeat.bind(this);
-
-    // Set up event listeners
-    document.addEventListener("visibilitychange", this.handleVisibilityChange);
-
-    // Start message queue processing
-    this.queueProcessInterval = setInterval(this.processMessageQueue, 50);
   }
 
   /**
-   * Returns the singleton instance of WebSocketManager
+   * Set up event listeners
+   * @private
    */
-  static getInstance() {
-    return WebSocketManager.instance || new WebSocketManager();
+  _setupEventListeners() {
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
   }
 
+  /**
+   * Start message queue processing
+   * @private
+   */
+  _startMessageQueueProcessing() {
+    this.queueProcessInterval = setInterval(
+      this.processMessageQueue,
+      WS_CONFIG.MESSAGE_QUEUE_PROCESS_INTERVAL_MS
+    );
+  }
+
+  /**
+   * Sets the current user
+   * @param {Object} user - User object
+   */
   setCurrentUser(user) {
     this.currentUser = user;
   }
 
+  /**
+   * Checks if we're on the base chat route
+   * @returns {boolean} - True if on base chat route
+   */
   isBaseRoomView() {
     return window.location.pathname === "/chat";
   }
@@ -85,102 +164,110 @@ class WebSocketManager {
     // If on base chat view without a room, don't establish connection
     if (this.isBaseRoomView() && !path) {
       console.log("On base chat route - no WebSocket connection needed yet");
-      this.connectionState = "base_view";
+      this.connectionState = CONNECTION_STATES.BASE_VIEW;
       return Promise.resolve();
     }
 
     // Prevent multiple simultaneous connection attempts
-    if (this.connectionState === "connecting") {
+    if (this.connectionState === CONNECTION_STATES.CONNECTING) {
       return this.connectionPromise;
     }
 
     // If already connected and not switching rooms, return
     if (
-      this.connectionState === "connected" &&
+      this.connectionState === CONNECTION_STATES.CONNECTED &&
       this.isWebSocketOpen() &&
       !path
     ) {
       return Promise.resolve();
     }
 
-    this.connectionState = "connecting";
+    // We must always have a roomId when establishing a connection
+    if (!path) {
+      const error = new Error("Room ID is required for WebSocket connection");
+      console.error(error.message);
+      return Promise.reject(error);
+    }
+
+    this.connectionState = CONNECTION_STATES.CONNECTING;
 
     // Create a new connection promise
-    this.connectionPromise = new Promise(async (resolve, reject) => {
-      try {
-        const token = await getAuthToken();
+    this.connectionPromise = this._createConnection(path);
+    return this.connectionPromise;
+  }
 
-        if (!token) {
-          this.connectionState = "disconnected";
-          reject(new Error("No authentication token available"));
-          return;
-        }
+  /**
+   * Creates a new WebSocket connection
+   * @param {string} path - Path to connect to
+   * @returns {Promise} - Connection promise
+   * @private
+   */
+  async _createConnection(path) {
+    try {
+      const token = await getAuthToken();
 
-        // Close existing connection if it exists
-        if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
-          this.closeExistingConnection();
-        }
+      if (!token) {
+        this.connectionState = CONNECTION_STATES.DISCONNECTED;
+        throw new Error("No authentication token available");
+      }
 
-        // We must always have a roomId when establishing a connection
-        if (!path) {
-          console.error("No room ID provided for WebSocket connection");
-          this.connectionState = "disconnected";
-          reject(new Error("Room ID is required for WebSocket connection"));
-          return;
-        }
+      // Close existing connection if it exists
+      if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
+        this._closeExistingConnection();
+      }
 
-        const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-        const baseUrl = `${protocol}//${window.location.host}/ws/${token}`;
-        const wsUrl = `${baseUrl}/${path}`;
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const baseUrl = `${protocol}//${window.location.host}/ws/${token}`;
+      const wsUrl = `${baseUrl}/${path}`;
 
-        console.log(`Connecting to WebSocket at: ${wsUrl}`);
-        this.ws = new WebSocket(wsUrl);
+      console.log(`Connecting to WebSocket at: ${wsUrl}`);
+      this.ws = new WebSocket(wsUrl);
 
+      return new Promise((resolve, reject) => {
         // Set up connection timeout
         const connectionTimeout = setTimeout(() => {
-          if (this.connectionState !== "connected") {
+          if (this.connectionState !== CONNECTION_STATES.CONNECTED) {
             this.ws.close();
-            this.connectionState = "disconnected";
+            this.connectionState = CONNECTION_STATES.DISCONNECTED;
             reject(new Error("Connection timeout"));
           }
-        }, 10000);
+        }, WS_CONFIG.CONNECTION_TIMEOUT_MS);
 
         this.ws.onopen = () => {
           clearTimeout(connectionTimeout);
           console.log("WebSocket connected to room:", path);
-          this.connectionState = "connected";
+          this.connectionState = CONNECTION_STATES.CONNECTED;
           this.currentRoom = path;
           this.reconnectAttempts = 0;
-          this.startHeartbeat();
-          this.notifyHandlers({
-            type: "connection_status",
+          this._startHeartbeat();
+          this._notifyHandlers({
+            type: MESSAGE_TYPES.CONNECTION_STATUS,
             status: "connected",
             room: path,
           });
           resolve();
         };
 
-        this.ws.onclose = this.handleWebSocketClose.bind(this);
-        this.ws.onerror = this.handleWebSocketError.bind(this);
+        this.ws.onclose = this._handleWebSocketClose.bind(this);
+        this.ws.onerror = this._handleWebSocketError.bind(this);
         this.ws.onmessage = this.handleWebSocketMessage;
-      } catch (error) {
-        console.error("Error connecting to WebSocket:", error);
-        this.connectionState = "disconnected";
-        reject(error);
-      }
-    });
-
-    return this.connectionPromise;
+      });
+    } catch (error) {
+      this.connectionState = CONNECTION_STATES.DISCONNECTED;
+      console.error("Error connecting to WebSocket:", error);
+      throw error;
+    }
   }
 
   /**
    * Closes the existing WebSocket connection
+   * @private
    */
-  closeExistingConnection() {
+  _closeExistingConnection() {
     if (!this.ws) return;
 
     console.log("Closing existing WebSocket connection");
-    this.stopHeartbeat();
+    this._stopHeartbeat();
 
     try {
       // Remove handlers to prevent reconnect logic
@@ -200,11 +287,12 @@ class WebSocketManager {
 
   /**
    * Handles WebSocket error events
+   * @private
    */
-  handleWebSocketError(event) {
+  _handleWebSocketError(event) {
     console.error("WebSocket error:", event);
-    this.notifyHandlers({
-      type: "connection_status",
+    this._notifyHandlers({
+      type: MESSAGE_TYPES.CONNECTION_STATUS,
       status: "error",
       error: "Connection error",
     });
@@ -212,6 +300,7 @@ class WebSocketManager {
 
   /**
    * Checks if the WebSocket is currently open
+   * @returns {boolean} - True if WebSocket is open
    */
   isWebSocketOpen() {
     return this.ws && this.ws.readyState === WebSocket.OPEN;
@@ -219,19 +308,21 @@ class WebSocketManager {
 
   /**
    * Starts the heartbeat interval
+   * @private
    */
-  startHeartbeat() {
-    this.stopHeartbeat();
+  _startHeartbeat() {
+    this._stopHeartbeat();
     this.heartbeatInterval = setInterval(
       this.sendHeartbeat,
-      this.heartbeatTimeoutMs
+      WS_CONFIG.HEARTBEAT_INTERVAL_MS
     );
   }
 
   /**
    * Stops the heartbeat interval
+   * @private
    */
-  stopHeartbeat() {
+  _stopHeartbeat() {
     if (this.heartbeatInterval) {
       clearInterval(this.heartbeatInterval);
       this.heartbeatInterval = null;
@@ -244,29 +335,28 @@ class WebSocketManager {
   sendHeartbeat() {
     if (this.isWebSocketOpen()) {
       try {
-        this.ws.send("ping");
+        this.ws.send(MESSAGE_TYPES.PING);
       } catch (error) {
         console.error("Error sending heartbeat:", error);
         this.ws.close(1000, "Heartbeat failed");
       }
     } else {
-      this.stopHeartbeat();
+      this._stopHeartbeat();
     }
   }
 
   /**
    * Handles presence status changes
+   * @param {Object} statusData - Presence status data
    */
   handlePresenceChange(statusData) {
     if (!this.isWebSocketOpen()) return;
 
     try {
-      this.ws.send(
-        JSON.stringify({
-          type: "presence_update",
-          ...statusData,
-        })
-      );
+      this._sendMessage({
+        type: MESSAGE_TYPES.PRESENCE_UPDATE,
+        ...statusData,
+      });
       console.log("Sent presence update:", statusData.status);
     } catch (error) {
       console.error("Error sending presence update:", error);
@@ -282,7 +372,7 @@ class WebSocketManager {
     // Reset unread count when tab becomes active
     if (this.isTabActive && this.unreadCount > 0) {
       this.unreadCount = 0;
-      this.updateTitle();
+      this._updateTitle();
     }
   }
 
@@ -306,7 +396,8 @@ class WebSocketManager {
     if (!this.isWebSocketOpen()) {
       this.pendingRoomSwitch = roomId;
       try {
-        await this.connect();
+        await this.connect(roomId);
+        return Promise.resolve();
       } catch (error) {
         return Promise.reject(new Error(`Failed to connect: ${error.message}`));
       }
@@ -314,39 +405,56 @@ class WebSocketManager {
 
     // Handle concurrent room switches
     if (this.switchingRoom) {
-      console.log(`Already switching rooms, queuing switch to ${roomId}`);
-      this.pendingRoomSwitch = roomId;
-      return new Promise((resolve, reject) => {
-        const checkInterval = setInterval(() => {
-          if (!this.switchingRoom) {
-            clearInterval(checkInterval);
-            this.switchRoom(roomId).then(resolve).catch(reject);
-          }
-        }, 300);
-
-        // Add a timeout
-        setTimeout(() => {
-          clearInterval(checkInterval);
-          reject(new Error("Room switch queue timeout"));
-        }, 10000);
-      });
+      return this._handleConcurrentRoomSwitch(roomId);
     }
 
+    return this._performRoomSwitch(roomId);
+  }
+
+  /**
+   * Handles concurrent room switch requests
+   * @param {string} roomId - The room ID to switch to
+   * @returns {Promise} - Room switch promise
+   * @private
+   */
+  _handleConcurrentRoomSwitch(roomId) {
+    console.log(`Already switching rooms, queuing switch to ${roomId}`);
+    this.pendingRoomSwitch = roomId;
+
+    return new Promise((resolve, reject) => {
+      const checkInterval = setInterval(() => {
+        if (!this.switchingRoom) {
+          clearInterval(checkInterval);
+          this.switchRoom(roomId).then(resolve).catch(reject);
+        }
+      }, 300);
+
+      // Add a timeout
+      setTimeout(() => {
+        clearInterval(checkInterval);
+        reject(new Error("Room switch queue timeout"));
+      }, WS_CONFIG.ROOM_SWITCH_TIMEOUT_MS * 2);
+    });
+  }
+
+  /**
+   * Performs the actual room switch
+   * @param {string} roomId - The room ID to switch to
+   * @returns {Promise} - Room switch promise
+   * @private
+   */
+  _performRoomSwitch(roomId) {
     this.switchingRoom = true;
 
     return new Promise((resolve, reject) => {
       // Cancel any existing room switch for this room
-      const existingCallback = this.roomSwitchCallbacks.get(roomId);
-      if (existingCallback) {
-        clearTimeout(existingCallback.timeoutId);
-        this.roomSwitchCallbacks.delete(roomId);
-      }
+      this._cleanupExistingRoomSwitch(roomId);
 
       const timeoutId = setTimeout(() => {
         this.roomSwitchCallbacks.delete(roomId);
         this.switchingRoom = false;
         reject(new Error("Room switch timeout"));
-      }, this.roomSwitchTimeoutMs);
+      }, WS_CONFIG.ROOM_SWITCH_TIMEOUT_MS);
 
       this.roomSwitchCallbacks.set(roomId, {
         resolve: () => {
@@ -362,25 +470,21 @@ class WebSocketManager {
 
       try {
         // Notify handlers that we're switching rooms
-        this.notifyHandlers({
-          type: "connection_status",
+        this._notifyHandlers({
+          type: MESSAGE_TYPES.CONNECTION_STATUS,
           status: "switching_room",
           targetRoom: roomId,
         });
 
         // Send room switch message
-        this.ws.send(
-          JSON.stringify({
-            type: "room_switch",
-            room_id: roomId,
-          })
-        );
+        this._sendMessage({
+          type: MESSAGE_TYPES.ROOM_SWITCH,
+          room_id: roomId,
+        });
 
         console.log(`Room switch request sent for room ${roomId}`);
       } catch (error) {
-        clearTimeout(timeoutId);
-        this.roomSwitchCallbacks.delete(roomId);
-        this.switchingRoom = false;
+        this._cleanupRoomSwitch(roomId, timeoutId);
         reject(
           new Error(`Failed to send room switch request: ${error.message}`)
         );
@@ -389,12 +493,41 @@ class WebSocketManager {
   }
 
   /**
+   * Cleans up an existing room switch
+   * @param {string} roomId - Room ID
+   * @private
+   */
+  _cleanupExistingRoomSwitch(roomId) {
+    const existingCallback = this.roomSwitchCallbacks.get(roomId);
+    if (existingCallback) {
+      clearTimeout(existingCallback.timeoutId);
+      this.roomSwitchCallbacks.delete(roomId);
+    }
+  }
+
+  /**
+   * Cleans up a room switch
+   * @param {string} roomId - Room ID
+   * @param {number} timeoutId - Timeout ID
+   * @private
+   */
+  _cleanupRoomSwitch(roomId, timeoutId) {
+    clearTimeout(timeoutId);
+    this.roomSwitchCallbacks.delete(roomId);
+    this.switchingRoom = false;
+  }
+
+  /**
    * Handles incoming WebSocket messages
+   * @param {MessageEvent} event - WebSocket message event
    */
   handleWebSocketMessage(event) {
     try {
       // Handle ping/pong differently
-      if (event.data === "ping" || event.data === "pong") {
+      if (
+        event.data === MESSAGE_TYPES.PING ||
+        event.data === MESSAGE_TYPES.PONG
+      ) {
         console.debug("Received server heartbeat");
         return;
       }
@@ -402,11 +535,11 @@ class WebSocketManager {
       const data = JSON.parse(event.data);
 
       // Handle room switch responses
-      if (data.type === "room_switch_success") {
-        this.handleRoomSwitchSuccess(data);
-      } else if (data.type === "room_switch_error") {
-        this.handleRoomSwitchError(data);
-      } else if (data.type === "pong") {
+      if (data.type === MESSAGE_TYPES.ROOM_SWITCH_SUCCESS) {
+        this._handleRoomSwitchSuccess(data);
+      } else if (data.type === MESSAGE_TYPES.ROOM_SWITCH_ERROR) {
+        this._handleRoomSwitchError(data);
+      } else if (data.type === MESSAGE_TYPES.PONG) {
         // Handle server heartbeat response
         console.debug("Received heartbeat response");
       } else {
@@ -420,8 +553,10 @@ class WebSocketManager {
 
   /**
    * Handles successful room switch
+   * @param {Object} data - Room switch success data
+   * @private
    */
-  handleRoomSwitchSuccess(data) {
+  _handleRoomSwitchSuccess(data) {
     this.currentRoom = data.room_id;
     console.log(`Successfully switched to room ${data.room_id}`);
 
@@ -433,14 +568,23 @@ class WebSocketManager {
     }
 
     // Notify handlers about successful room switch
-    this.notifyHandlers({
-      type: "connection_status",
+    this._notifyHandlers({
+      type: MESSAGE_TYPES.CONNECTION_STATUS,
       status: "room_switched",
       room: data.room_id,
     });
 
+    this._processPendingRoomSwitch(data.room_id);
+  }
+
+  /**
+   * Process pending room switch if any
+   * @param {string} currentRoomId - Current room ID
+   * @private
+   */
+  _processPendingRoomSwitch(currentRoomId) {
     // Process any pending room switch
-    if (this.pendingRoomSwitch && this.pendingRoomSwitch !== data.room_id) {
+    if (this.pendingRoomSwitch && this.pendingRoomSwitch !== currentRoomId) {
       const nextRoom = this.pendingRoomSwitch;
       this.pendingRoomSwitch = null;
       setTimeout(() => {
@@ -453,8 +597,10 @@ class WebSocketManager {
 
   /**
    * Handles room switch errors
+   * @param {Object} data - Room switch error data
+   * @private
    */
-  handleRoomSwitchError(data) {
+  _handleRoomSwitchError(data) {
     const roomId = data.room_id || this.pendingRoomSwitch;
     console.error(`Room switch error for room ${roomId}: ${data.message}`);
 
@@ -466,8 +612,8 @@ class WebSocketManager {
     }
 
     // Notify handlers about failed room switch
-    this.notifyHandlers({
-      type: "connection_status",
+    this._notifyHandlers({
+      type: MESSAGE_TYPES.CONNECTION_STATUS,
       status: "room_switch_failed",
       room: data.room_id,
       error: data.message,
@@ -492,16 +638,11 @@ class WebSocketManager {
 
       // Keep track of processed messages
       if (data.message_id) {
-        this.processedMessages.add(data.message_id);
-        // Limit size of processed messages set
-        if (this.processedMessages.size > 1000) {
-          const iterator = this.processedMessages.values();
-          this.processedMessages.delete(iterator.next().value);
-        }
+        this._trackProcessedMessage(data.message_id);
       }
 
       // Forward all messages to handlers
-      this.notifyHandlers(data);
+      this._notifyHandlers(data);
     } catch (error) {
       console.error("Error processing message:", error);
     } finally {
@@ -510,32 +651,61 @@ class WebSocketManager {
   }
 
   /**
+   * Tracks processed messages and limits set size
+   * @param {string} messageId - Message ID to track
+   * @private
+   */
+  _trackProcessedMessage(messageId) {
+    this.processedMessages.add(messageId);
+
+    // Limit size of processed messages set
+    if (this.processedMessages.size > WS_CONFIG.MAX_PROCESSED_MESSAGES) {
+      const iterator = this.processedMessages.values();
+      this.processedMessages.delete(iterator.next().value);
+    }
+  }
+
+  /**
+   * Generic method to send a message through WebSocket
+   * @param {Object} payload - Message payload
+   * @private
+   */
+  _sendMessage(payload) {
+    if (!this.isWebSocketOpen()) {
+      throw new Error("WebSocket not open");
+    }
+
+    this.ws.send(JSON.stringify(payload));
+  }
+
+  /**
    * Sends a chat message
+   * @param {Object} messageData - Message data
    * @returns {string} - The temporary message ID
    */
   sendMessage(messageData) {
     if (!this.isWebSocketOpen()) {
-      this.handleConnectionLost();
+      this._handleConnectionLost();
       return null;
     }
 
-    const tempId = this.generateTempId();
-    const message = {
-      type: "message",
-      content: messageData.content,
-      message_type: messageData.type || "text",
-      room_id: messageData.roomId,
-      temp_id: tempId,
-      reply_to: messageData.replyTo,
-    };
+    const tempId = this._generateTempId();
 
     try {
-      this.ws.send(JSON.stringify(message));
+      this._sendMessage({
+        type: MESSAGE_TYPES.MESSAGE,
+        content: messageData.content,
+        message_type: messageData.type || MESSAGE_TYPES.TEXT,
+        room_id: messageData.roomId,
+        temp_id: tempId,
+        reply_to: messageData.replyTo,
+      });
+
       console.log("Message sent successfully with tempId:", tempId);
     } catch (err) {
       console.error("Error sending message:", err);
-      this.notifyHandlers({
-        type: "error",
+      this._notifyHandlers({
+        type: MESSAGE_TYPES.ERROR,
         message: "Failed to send message. Please try again.",
         temp_id: tempId,
       });
@@ -546,11 +716,12 @@ class WebSocketManager {
 
   /**
    * Handles lost connection scenarios
+   * @private
    */
-  handleConnectionLost() {
+  _handleConnectionLost() {
     console.error("WebSocket not open, cannot send message");
-    this.notifyHandlers({
-      type: "error",
+    this._notifyHandlers({
+      type: MESSAGE_TYPES.ERROR,
       message: "Connection lost. Trying to reconnect...",
     });
 
@@ -562,6 +733,7 @@ class WebSocketManager {
 
   /**
    * Sends user typing status
+   * @param {boolean} isTyping - Whether user is typing
    */
   sendTypingStatus(isTyping) {
     if (!this.isWebSocketOpen()) return;
@@ -569,32 +741,29 @@ class WebSocketManager {
     clearTimeout(this.typingDebounceTimer);
     this.typingDebounceTimer = setTimeout(() => {
       try {
-        this.ws.send(
-          JSON.stringify({
-            type: "typing_status",
-            is_typing: isTyping,
-          })
-        );
+        this._sendMessage({
+          type: MESSAGE_TYPES.TYPING_STATUS,
+          is_typing: isTyping,
+        });
       } catch (error) {
         console.error("Error sending typing status:", error);
       }
-    }, this.typingDebounceMs);
+    }, WS_CONFIG.TYPING_DEBOUNCE_MS);
   }
 
   /**
    * Sends read receipts for messages
+   * @param {Array<string>} messageIds - Message IDs to mark as read
    */
   sendReadReceipt(messageIds) {
     if (!this.isWebSocketOpen() || !messageIds || messageIds.length === 0)
       return;
 
     try {
-      this.ws.send(
-        JSON.stringify({
-          type: "read_receipt",
-          message_ids: messageIds,
-        })
-      );
+      this._sendMessage({
+        type: MESSAGE_TYPES.READ_RECEIPT,
+        message_ids: messageIds,
+      });
     } catch (error) {
       console.error("Error sending read receipt:", error);
     }
@@ -602,23 +771,22 @@ class WebSocketManager {
 
   /**
    * Sends an emoji reaction to a message
+   * @param {string} messageId - Message ID
+   * @param {string} emoji - Emoji to react with
    */
   sendEmojiReaction(messageId, emoji) {
     if (!this.isWebSocketOpen() || !messageId || !emoji) return;
 
     try {
-      this.ws.send(
-        JSON.stringify({
-          type: "add_emoji_reaction",
-          message_id: messageId,
-          emoji: emoji,
-        })
-      );
+      this._sendMessage({
+        type: MESSAGE_TYPES.ADD_EMOJI_REACTION,
+        message_id: messageId,
+        emoji: emoji,
+      });
     } catch (error) {
       console.error("Error sending emoji reaction:", error);
     }
   }
-
   /**
    * Requests an update of rooms from the server
    */
@@ -626,11 +794,9 @@ class WebSocketManager {
     if (!this.isWebSocketOpen()) return;
 
     try {
-      this.ws.send(
-        JSON.stringify({
-          type: "get_rooms",
-        })
-      );
+      this._sendMessage({
+        type: MESSAGE_TYPES.GET_ROOMS,
+      });
     } catch (error) {
       console.error("Error requesting rooms update:", error);
     }
@@ -638,22 +804,22 @@ class WebSocketManager {
 
   /**
    * Sends a message edit
+   * @param {string} messageId - ID of the message to edit
+   * @param {string} newContent - Updated content for the message
    */
   sendMessageEdit(messageId, newContent) {
     if (!this.isWebSocketOpen() || !messageId) return;
 
     try {
-      this.ws.send(
-        JSON.stringify({
-          type: "edit_message",
-          message_id: messageId,
-          content: newContent,
-        })
-      );
+      this._sendMessage({
+        type: MESSAGE_TYPES.EDIT_MESSAGE,
+        message_id: messageId,
+        content: newContent,
+      });
     } catch (error) {
       console.error("Error editing message:", error);
-      this.notifyHandlers({
-        type: "error",
+      this._notifyHandlers({
+        type: MESSAGE_TYPES.ERROR,
         message: "Failed to edit message. Please try again.",
       });
     }
@@ -661,21 +827,20 @@ class WebSocketManager {
 
   /**
    * Sends a message delete request
+   * @param {string} messageId - ID of the message to delete
    */
   sendMessageDelete(messageId) {
     if (!this.isWebSocketOpen() || !messageId) return;
 
     try {
-      this.ws.send(
-        JSON.stringify({
-          type: "delete_message",
-          message_id: messageId,
-        })
-      );
+      this._sendMessage({
+        type: MESSAGE_TYPES.DELETE_MESSAGE,
+        message_id: messageId,
+      });
     } catch (error) {
       console.error("Error deleting message:", error);
-      this.notifyHandlers({
-        type: "error",
+      this._notifyHandlers({
+        type: MESSAGE_TYPES.ERROR,
         message: "Failed to delete message. Please try again.",
       });
     }
@@ -683,6 +848,7 @@ class WebSocketManager {
 
   /**
    * Adds a message handler
+   * @param {Function} handler - Function to handle messages
    */
   addMessageHandler(handler) {
     if (typeof handler === "function") {
@@ -692,6 +858,7 @@ class WebSocketManager {
 
   /**
    * Removes a message handler
+   * @param {Function} handler - Handler to remove
    */
   removeMessageHandler(handler) {
     this.messageHandlers.delete(handler);
@@ -699,8 +866,10 @@ class WebSocketManager {
 
   /**
    * Notifies all handlers with data
+   * @param {Object} data - Data to pass to handlers
+   * @private
    */
-  notifyHandlers(data) {
+  _notifyHandlers(data) {
     if (!data || typeof data !== "object") return;
 
     console.log("Notifying handlers with:", data.type);
@@ -715,8 +884,9 @@ class WebSocketManager {
 
   /**
    * Updates the page title with unread count
+   * @private
    */
-  updateTitle() {
+  _updateTitle() {
     if (!this.originalTitle) {
       this.originalTitle = document.title;
     }
@@ -731,11 +901,13 @@ class WebSocketManager {
 
   /**
    * Handles WebSocket close events
+   * @param {CloseEvent} event - WebSocket close event
+   * @private
    */
-  handleWebSocketClose(event) {
+  _handleWebSocketClose(event) {
     console.log("WebSocket closed:", event.code, event.reason);
-    this.stopHeartbeat();
-    this.connectionState = "disconnected";
+    this._stopHeartbeat();
+    this.connectionState = CONNECTION_STATES.DISCONNECTED;
 
     // Clear any pending room switches
     for (const [_, callback] of this.roomSwitchCallbacks) {
@@ -743,39 +915,42 @@ class WebSocketManager {
       callback.reject(new Error("Connection closed"));
     }
     this.roomSwitchCallbacks.clear();
+    this.switchingRoom = false;
 
     // Normal closure, no need to reconnect
     if (event.code === 1000) {
       console.log("WebSocket closed normally");
-    } else if (this.reconnectAttempts < this.maxReconnectAttempts) {
-      this.scheduleReconnect();
+    } else if (this.reconnectAttempts < WS_CONFIG.MAX_RECONNECT_ATTEMPTS) {
+      this._scheduleReconnect();
     } else {
       console.error("Max reconnection attempts reached");
     }
 
-    this.notifyHandlers({
-      type: "connection_status",
+    this._notifyHandlers({
+      type: MESSAGE_TYPES.CONNECTION_STATUS,
       status: "disconnected",
-      willReconnect: this.reconnectAttempts < this.maxReconnectAttempts,
+      willReconnect: this.reconnectAttempts < WS_CONFIG.MAX_RECONNECT_ATTEMPTS,
     });
   }
 
   /**
    * Schedules a reconnection attempt with exponential backoff
+   * @private
    */
-  scheduleReconnect() {
+  _scheduleReconnect() {
     this.reconnectAttempts++;
     const delay = Math.min(
-      this.reconnectBackoffMs * Math.pow(2, this.reconnectAttempts - 1),
+      WS_CONFIG.INITIAL_RECONNECT_DELAY_MS *
+        Math.pow(2, this.reconnectAttempts - 1),
       30000 // Max 30 seconds
     );
 
     console.log(
-      `WebSocket reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+      `WebSocket reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${WS_CONFIG.MAX_RECONNECT_ATTEMPTS})`
     );
 
     setTimeout(() => {
-      if (this.connectionState !== "connecting") {
+      if (this.connectionState !== CONNECTION_STATES.CONNECTING) {
         this.connect(this.currentRoom).catch((error) => {
           console.error("Reconnection failed:", error);
         });
@@ -785,17 +960,19 @@ class WebSocketManager {
 
   /**
    * Generates a temporary message ID
+   * @returns {string} - Temporary message ID
+   * @private
    */
-  generateTempId() {
+  _generateTempId() {
     return `temp-${Date.now()}-${++this.messageCounter}`;
   }
 
   /**
-   * Cleans up resources
+   * Cleans up resources and prepares for object destruction
    */
   cleanup() {
     // Clear intervals and timeouts
-    this.stopHeartbeat();
+    this._stopHeartbeat();
 
     if (this.queueProcessInterval) {
       clearInterval(this.queueProcessInterval);
@@ -820,7 +997,7 @@ class WebSocketManager {
     );
 
     // Close WebSocket
-    this.closeExistingConnection();
+    this._closeExistingConnection();
 
     // Reset state
     this.currentRoom = null;
