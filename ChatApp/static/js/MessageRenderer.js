@@ -13,6 +13,11 @@ class MessageRenderer {
     this.LINKPREVIEW_API_KEY = "1c04df7c16f6df68d9c4d8fb66c68a2e";
     this.LINKPREVIEW_API_URL = "https://api.linkpreview.net/";
     this.MAX_MESSAGE_WIDTH = 85;
+    this.CONSTANTS = {
+      GROUP_TIME_THRESHOLD: 5 * 60 * 1000, // 5 minutes
+      LINK_PREVIEW_TIMEOUT: 5000, // 5 seconds
+      URL_REGEX: /(https?:\/\/[^\s]+)/g,
+    };
     this.initializeStyles();
   }
 
@@ -61,7 +66,10 @@ class MessageRenderer {
   async fetchLinkPreview(url) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const timeoutId = setTimeout(
+        () => controller.abort(),
+        this.CONSTANTS.LINK_PREVIEW_TIMEOUT
+      );
 
       const apiUrl = new URL(this.LINKPREVIEW_API_URL);
       apiUrl.searchParams.append("key", this.LINKPREVIEW_API_KEY);
@@ -103,8 +111,7 @@ class MessageRenderer {
   }
 
   extractUrlFromText(text) {
-    const urlRegex = /(https?:\/\/[^\s]+)/g;
-    return text.match(urlRegex)?.[0] || null;
+    return text.match(this.CONSTANTS.URL_REGEX)?.[0] || null;
   }
 
   async generateLinkPreviewHTML(url) {
@@ -112,6 +119,7 @@ class MessageRenderer {
     if (!previewData) return "";
 
     const previewId = `preview-${Date.now()}`;
+
     const imageSection = previewData.image
       ? `<div class="relative w-full h-48 bg-slate-100 dark:bg-slate-800">
            <img src="${previewData.image}" 
@@ -245,32 +253,27 @@ class MessageRenderer {
   }
 
   getBubbleShape(isCurrentUser, messagePosition) {
-    if (isCurrentUser) {
-      switch (messagePosition) {
-        case "first":
-          return "rounded-t-2xl rounded-l-2xl rounded-br-md"; // First in group
-        case "middle":
-          return "rounded-l-2xl rounded-r-md"; // Middle
-        case "last":
-          return "rounded-b-2xl rounded-l-2xl rounded-tr-md bubble-last current-user"; // Last in group
-        default:
-          return "rounded-2xl"; // Single message
-      }
-    } else {
-      switch (messagePosition) {
-        case "first":
-          return "rounded-t-2xl rounded-r-2xl rounded-bl-md"; // First in group
-        case "middle":
-          return "rounded-r-2xl rounded-l-md"; // Middle
-        case "last":
-          return "rounded-b-2xl rounded-r-2xl rounded-tl-md bubble-last other-user"; // Last in group
-        default:
-          return "rounded-2xl"; // Single message
-      }
-    }
+    // Object mapping for bubble shapes based on position and user
+    const shapes = {
+      currentUser: {
+        first: "rounded-t-2xl rounded-l-2xl rounded-br-md", // First in group
+        middle: "rounded-l-2xl rounded-r-md", // Middle
+        last: "rounded-b-2xl rounded-l-2xl rounded-tr-md bubble-last current-user", // Last in group
+        single: "rounded-2xl", // Single message
+      },
+      otherUser: {
+        first: "rounded-t-2xl rounded-r-2xl rounded-bl-md", // First in group
+        middle: "rounded-r-2xl rounded-l-md", // Middle
+        last: "rounded-b-2xl rounded-r-2xl rounded-tl-md bubble-last other-user", // Last in group
+        single: "rounded-2xl", // Single message
+      },
+    };
+
+    const userType = isCurrentUser ? "currentUser" : "otherUser";
+    return shapes[userType][messagePosition] || shapes[userType].single;
   }
 
-async createMessageHTML(
+  async createMessageHTML(
     {
       id,
       username,
@@ -290,7 +293,8 @@ async createMessageHTML(
     if (
       previousMessage &&
       previousMessage.username === username &&
-      new Date(timestamp) - new Date(previousMessage.timestamp) < 5 * 60 * 1000
+      new Date(timestamp) - new Date(previousMessage.timestamp) <
+        this.CONSTANTS.GROUP_TIME_THRESHOLD
     ) {
       showHeader = false;
     }
@@ -301,108 +305,64 @@ async createMessageHTML(
     const timeDisplay = this.formatTimeDisplay(messageDate);
 
     // Message position for bubble styling
-    let messagePosition;
+    let messagePosition = "single";
     if (showHeader) {
-      messagePosition = "first";
+      messagePosition = isLastInGroup ? "single" : "first";
     } else if (isLastInGroup) {
       messagePosition = "last";
     } else {
       messagePosition = "middle";
     }
 
-    // Message styling
+    // Generate HTML components
     const bubbleClasses = isCurrentUser
       ? "bg-blue-500 dark:bg-blue-600 text-white"
       : "bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100";
     const bubbleShape = this.getBubbleShape(isCurrentUser, messagePosition);
     const bubbleShadow = isLastInGroup ? "shadow-md" : "shadow-sm";
 
-    // Read receipt
+    // Build the message components
     const readReceiptHtml = this.createReadReceiptHtml(
       isCurrentUser,
       isLastInGroup,
       read_by
     );
-
-    // Profile photo - Now positioned next to the message, not with username
-    let profilePhotoHtml = "";
-    if (!isCurrentUser) {
-      const profilePhotoUrl = await this.getUserProfilePhoto(username);
-      if (profilePhotoUrl) {
-        profilePhotoHtml = `
-        <img src="${profilePhotoUrl}" 
-             alt="${username}'s profile" 
-             class="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-600">
-      `;
-      } else {
-        // Fallback avatar if no profile photo
-        profilePhotoHtml = `
-        <div class="w-8 h-8 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold">
-          ${username.charAt(0).toUpperCase()}
-        </div>
-      `;
-      }
-    }
-
-    // Username shown above message
-    const headerHtml =
-      showHeader && !isCurrentUser
-        ? `
-      <div class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">
-        ${username}
-      </div>
-    `
-        : "";
-
-    // Reply
+    const profilePhotoHtml = await this.createProfilePhotoHtml(
+      username,
+      isCurrentUser
+    );
+    const headerHtml = this.createHeaderHtml(
+      username,
+      showHeader,
+      isCurrentUser
+    );
     const replyClasses = isCurrentUser
       ? "bg-blue-400/70 dark:bg-blue-500/70 text-white"
       : "bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200";
     const replyContent = this.createReplyHtml(reply_to, replyClasses);
-
-    // Edited indicator
-    const editedLabel = edited
-      ? `<span class="text-xs opacity-60 ml-1" aria-label="Edited" title="Edited at ${new Date(
-          timestamp
-        ).toLocaleString()}">·</span>`
-      : "";
-
-    // Reactions
+    const editedLabel = this.createEditedLabel(edited, timestamp);
     const reactionsHtml = this.createReactionsHtml(reactions, isCurrentUser);
-
-    // Message actions
     const messageActionsHtml = this.createMessageActionsHtml(
       isCurrentUser,
       type
     );
 
     // Message content and link preview
-    let messageContent,
-      linkPreviewHtml = "";
-    if (type === "image") {
-      messageContent = this.createImageContentHtml(content);
-    } else {
-      const url = this.extractUrlFromText(content);
-      const wrappedContent = this.wrapLongText(content);
-      messageContent = `<div class="break-words overflow-hidden">${
-        this.formatMessageText
-          ? this.formatMessageText(wrappedContent)
-          : this.escapeHtml(wrappedContent)
-      }</div>`;
-
-      if (url) {
-        linkPreviewHtml = await this.generateLinkPreviewHTML(url);
-      }
-    }
+    const { messageContent, linkPreviewHtml } =
+      await this.createContentWithPreview(content, type);
 
     // Spacing logic
     const spacingClass = isLastInGroup ? "mb-2" : "mb-0.5";
     const bubbleMargin = !showHeader ? "mt-0.5" : "";
 
     const messageInfoHtml = `
-      <div class="message-info ${isCurrentUser ? 'ml-2' : 'mr-2'} absolute bottom-0 ${
-        isCurrentUser ? 'left-0 translate-x-[-100%]' : 'right-0 translate-x-[100%]'
-      } text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap
+      <div class="message-info ${
+        isCurrentUser ? "ml-2" : "mr-2"
+      } absolute bottom-0 ${
+      isCurrentUser
+        ? "left-0 translate-x-[-100%]"
+        : "right-0 translate-x-[100%]"
+    } text-xs opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap
            text-slate-400 dark:text-slate-500 flex items-center gap-1 pointer-events-none" 
            aria-label="Message info">
           <span class="message-timestamp" title="${messageDate.toLocaleString()}">${timeDisplay}</span>
@@ -421,22 +381,22 @@ async createMessageHTML(
         data-position="${messagePosition}">
         
         <!-- Profile photo column for other users -->
-    ${
-      !isCurrentUser
-        ? `
-    <div class="flex-shrink-0 mr-2 ${showHeader ? "block" : "invisible"}">
-      ${profilePhotoHtml}
-    </div>
-    `
-        : ""
-    }
+        ${
+          !isCurrentUser
+            ? `
+        <div class="flex-shrink-0 mr-2 ${showHeader ? "block" : "invisible"}">
+          ${profilePhotoHtml}
+        </div>
+        `
+            : ""
+        }
         
         <!-- Message content -->
-    <div class="flex flex-col ${
-      isCurrentUser ? "items-end" : "items-start"
-    } max-w-[75%] sm:max-w-[85%] md:max-w-[75%] relative">
-        ${headerHtml}
-        <div class="message-container relative ${bubbleMargin}">
+        <div class="flex flex-col ${
+          isCurrentUser ? "items-end" : "items-start"
+        } max-w-[75%] sm:max-w-[85%] md:max-w-[75%] relative">
+            ${headerHtml}
+            <div class="message-container relative ${bubbleMargin}">
                 ${replyContent}
                 <div class="message-bubble px-4 py-2 ${bubbleShape} ${bubbleClasses} ${bubbleShadow} relative">
                     <div class="text-sm message-content">
@@ -451,7 +411,7 @@ async createMessageHTML(
             ${messageActionsHtml}
         </div>
     </div>
-  `;
+    `;
   }
 
   createReadReceiptHtml(isCurrentUser, isLastInGroup, read_by) {
@@ -467,6 +427,40 @@ async createMessageHTML(
         ${read_by.length >= 2 ? "Read" : "Delivered"}
       </div>
     `;
+  }
+
+  async createProfilePhotoHtml(username, isCurrentUser) {
+    if (isCurrentUser) return "";
+
+    const profilePhotoUrl = await this.getUserProfilePhoto(username);
+    if (profilePhotoUrl) {
+      return `
+        <img src="${profilePhotoUrl}" 
+             alt="${username}'s profile" 
+             class="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-600">
+      `;
+    }
+
+    // Fallback avatar if no profile photo
+    return `
+      <div class="w-8 h-8 rounded-full bg-slate-300 dark:bg-slate-600 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold">
+        ${username.charAt(0).toUpperCase()}
+      </div>
+    `;
+  }
+
+  createHeaderHtml(username, showHeader, isCurrentUser) {
+    return showHeader && !isCurrentUser
+      ? `<div class="text-xs font-bold text-slate-500 dark:text-slate-400 mb-1">${username}</div>`
+      : "";
+  }
+
+  createEditedLabel(edited, timestamp) {
+    return edited
+      ? `<span class="text-xs opacity-60 ml-1" aria-label="Edited" title="Edited at ${new Date(
+          timestamp
+        ).toLocaleString()}">·</span>`
+      : "";
   }
 
   createReplyHtml(reply_to, replyClasses) {
@@ -488,24 +482,24 @@ async createMessageHTML(
           </div>
         </div>
       `;
-    } else {
-      return `
-        <div class="reply-reference flex items-start gap-2 p-2 mb-1 rounded-lg ${replyClasses}" 
-             aria-label="Replying to ${reply_to.username}">
-          <div class="reply-icon text-blue-200 dark:text-blue-300">
-            <i class="fas fa-reply"></i>
+    }
+
+    return `
+      <div class="reply-reference flex items-start gap-2 p-2 mb-1 rounded-lg ${replyClasses}" 
+           aria-label="Replying to ${reply_to.username}">
+        <div class="reply-icon text-blue-200 dark:text-blue-300">
+          <i class="fas fa-reply"></i>
+        </div>
+        <div class="reply-content">
+          <div class="reply-header text-xs font-semibold">
+            ${reply_to.username}
           </div>
-          <div class="reply-content">
-            <div class="reply-header text-xs font-semibold">
-              ${reply_to.username}
-            </div>
-            <div class="reply-body text-xs truncate">
-              ${this.truncateText(reply_to.content, 100)}
-            </div>
+          <div class="reply-body text-xs truncate">
+            ${this.truncateText(reply_to.content, 100)}
           </div>
         </div>
-      `;
-    }
+      </div>
+    `;
   }
 
   createReactionsHtml(reactions, isCurrentUser) {
@@ -538,20 +532,43 @@ async createMessageHTML(
   }
 
   createMessageActionsHtml(isCurrentUser, type) {
-    const editButtonHtml =
-      isCurrentUser && type !== "image"
-        ? `<button class="edit-message-btn text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" 
-                aria-label="Edit" title="Edit">
-                <i class="fas fa-edit"></i>
-            </button>`
-        : "";
+    const actionButtons = [];
 
-    const deleteButtonHtml = isCurrentUser
-      ? `<button class="delete-message-btn text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-200 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" 
+    // Add reaction button
+    actionButtons.push(`
+      <button class="action-btn reaction-btn text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" 
+              aria-label="Add Reaction" title="React">
+          <i class="fas fa-smile"></i>
+      </button>
+    `);
+
+    // Add reply button
+    actionButtons.push(`
+      <button class="action-btn reply-message-btn text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" 
+              aria-label="Reply" title="Reply">
+          <i class="fas fa-reply"></i>
+      </button>
+    `);
+
+    // Add edit button for current user's text messages
+    if (isCurrentUser && type !== "image") {
+      actionButtons.push(`
+        <button class="action-btn edit-message-btn text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" 
+                aria-label="Edit" title="Edit">
+            <i class="fas fa-edit"></i>
+        </button>
+      `);
+    }
+
+    // Add delete button for current user's messages
+    if (isCurrentUser) {
+      actionButtons.push(`
+        <button class="action-btn delete-message-btn text-slate-600 dark:text-slate-300 hover:text-red-600 dark:hover:text-red-400 transition-colors duration-200 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" 
                 aria-label="Delete" title="Delete">
-                <i class="fas fa-trash"></i>
-            </button>`
-      : "";
+            <i class="fas fa-trash"></i>
+        </button>
+      `);
+    }
 
     return `
       <div class="message-actions absolute -top-7 ${
@@ -559,16 +576,7 @@ async createMessageHTML(
       } 
           opacity-0 group-hover:opacity-100 transform scale-95 group-hover:scale-100 transition-all duration-200 
           bg-white dark:bg-slate-800 rounded-full shadow-lg px-2 py-1 flex gap-2 z-20">
-          <button class="reaction-btn text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" 
-                  aria-label="Add Reaction" title="React">
-              <i class="fas fa-smile"></i>
-          </button>
-          <button class="reply-message-btn text-slate-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors duration-200 p-1 rounded-full hover:bg-slate-100 dark:hover:bg-slate-700" 
-                  aria-label="Reply" title="Reply">
-              <i class="fas fa-reply"></i>
-          </button>
-          ${editButtonHtml}
-          ${deleteButtonHtml}
+          ${actionButtons.join("")}
       </div>
     `;
   }
@@ -590,9 +598,31 @@ async createMessageHTML(
     `;
   }
 
+  async createContentWithPreview(content, type) {
+    let messageContent = "";
+    let linkPreviewHtml = "";
+
+    if (type === "image") {
+      messageContent = this.createImageContentHtml(content);
+    } else {
+      const url = this.extractUrlFromText(content);
+      const wrappedContent = this.wrapLongText(content);
+      messageContent = `<div class="break-words overflow-hidden">${
+        this.formatMessageText
+          ? this.formatMessageText(wrappedContent)
+          : this.escapeHtml(wrappedContent)
+      }</div>`;
+
+      if (url) {
+        linkPreviewHtml = await this.generateLinkPreviewHTML(url);
+      }
+    }
+
+    return { messageContent, linkPreviewHtml };
+  }
+
   formatMessageText(text) {
     if (!text) return "";
-
     // Remove zero-width spaces
     let formattedText = text.replace(/\u200B/g, "");
 
