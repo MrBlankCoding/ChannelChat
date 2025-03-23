@@ -420,7 +420,8 @@ export const signInWithGoogle = async () => {
 
     // Get user info and Google access token
     const user = userCredential.user;
-    const credential = GoogleAuthProvider.credentialFromResult(userCredential);
+    const credential =
+      authUtils.GoogleAuthProvider.credentialFromResult(userCredential);
     const token = credential.accessToken;
 
     // Extract profile information
@@ -437,22 +438,22 @@ export const signInWithGoogle = async () => {
     }
 
     // Store profile photo URL in localStorage for quick access
-  if (photoURL) {
-    try {
-      // Upload the Google profile photo to your server
-      const serverPhotoUrl = await uploadGoogleProfilePhoto(photoURL);
+    if (photoURL) {
+      try {
+        // Upload the Google profile photo to your server
+        const serverPhotoUrl = await uploadGoogleProfilePhoto(photoURL);
 
-      // If upload successful, update the user profile with your server URL
-      if (serverPhotoUrl) {
-        await authUtils.updateProfile(user, {
-          photoURL: serverPhotoUrl,
-        });
+        // If upload successful, update the user profile with your server URL
+        if (serverPhotoUrl) {
+          await authUtils.updateProfile(user, {
+            photoURL: serverPhotoUrl,
+          });
+        }
+      } catch (err) {
+        console.error("Error processing profile photo:", err);
+        // Continue with sign-in even if photo upload fails
       }
-    } catch (err) {
-      console.error("Error processing profile photo:", err);
-      // Continue with sign-in even if photo upload fails
     }
-  }
 
     // Create user in backend database if it doesn't exist
     const { default: authAxios } = await import("./authAxios.js");
