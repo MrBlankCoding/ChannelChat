@@ -27,17 +27,15 @@ export const initAuth = async () => {
       auth = firebase.auth;
       authUtils = firebase.authUtils;
 
-      // Check if user wants to be remembered
-      const rememberMe = localStorage.getItem("rememberMe") === "true";
+      // Check if user wants to be remembered - default to true for PWA
+      const rememberMe = localStorage.getItem("rememberMe") !== "false";
 
       // Set persistence based on remember me preference
+      // For PWA, we want local persistence by default
       if (rememberMe) {
-        await authUtils.setPersistence(
-          auth,
-          authUtils.browserSessionPersistence
-        );
+        await authUtils.setPersistence(auth, authUtils.browserLocalPersistence);
       } else {
-        // Default to session persistence (cleared when browser is closed)
+        // Only use session persistence if explicitly not remembered
         await authUtils.setPersistence(
           auth,
           authUtils.browserSessionPersistence
@@ -58,6 +56,13 @@ export const initAuth = async () => {
           // Store authentication state
           localStorage.setItem("isAuthenticated", "true");
 
+          // Store user info in localStorage for quick access
+          localStorage.setItem("userId", user.uid);
+          localStorage.setItem("userEmail", user.email);
+          if (user.displayName) {
+            localStorage.setItem("userName", user.displayName);
+          }
+
           // Clear token cache on user change to force refresh
           clearTokenCache();
         } else {
@@ -67,6 +72,9 @@ export const initAuth = async () => {
 
           // Clear authentication state
           localStorage.removeItem("isAuthenticated");
+          localStorage.removeItem("userId");
+          localStorage.removeItem("userEmail");
+          localStorage.removeItem("userName");
           clearTokenCache();
         }
 
@@ -134,6 +142,9 @@ export const registerUser = async (email, password, username) => {
     // Send email verification
     await authUtils.sendEmailVerification(user);
 
+    // Set rememberMe to true by default for new users
+    localStorage.setItem("rememberMe", "true");
+
     return user;
   } catch (error) {
     console.error("Registration error:", error);
@@ -148,8 +159,8 @@ export const loginUser = async (email, password) => {
   }
 
   try {
-    // Get rememberMe preference before login
-    const rememberMe = localStorage.getItem("rememberMe") === "true";
+    // Get rememberMe preference before login - default to true for PWA
+    const rememberMe = localStorage.getItem("rememberMe") !== "false";
 
     // Set persistence based on rememberMe preference
     if (rememberMe) {
@@ -164,6 +175,12 @@ export const loginUser = async (email, password) => {
       password
     );
     clearTokenCache(); // Clear cache on login
+
+    // Store credentials in localStorage for PWA offline access
+    if (rememberMe) {
+      localStorage.setItem("lastLoginEmail", email);
+    }
+
     return userCredential.user;
   } catch (error) {
     console.error("Login error:", error);
@@ -179,6 +196,15 @@ export const logoutUser = async () => {
 
   try {
     clearTokenCache(); // Clear cache on logout
+
+    // Clear PWA-specific stored data
+    localStorage.removeItem("isAuthenticated");
+    localStorage.removeItem("userId");
+    localStorage.removeItem("userEmail");
+    localStorage.removeItem("userName");
+
+    // Keep rememberMe preference unless explicitly set to false
+
     await authUtils.signOut(auth);
     window.location.href = "/login"; // Redirect to login page
   } catch (error) {
@@ -239,12 +265,23 @@ export const verifyPasswordResetCode = async (actionCode) => {
 
 // Get current user
 export const getCurrentUser = () => {
-  return currentUser;
+  if (currentUser) {
+    return currentUser;
+  }
+
+  // If no current user but we have stored auth data, try to use that
+  if (localStorage.getItem("isAuthenticated") === "true" && auth) {
+    return auth.currentUser;
+  }
+
+  return null;
 };
 
 // Get authentication token for API requests with caching
 export const getAuthToken = async (forceRefresh = false) => {
-  if (!currentUser) return null;
+  // Try to get the current user
+  const user = getCurrentUser();
+  if (!user) return null;
 
   const now = Date.now();
 
@@ -259,7 +296,7 @@ export const getAuthToken = async (forceRefresh = false) => {
   }
 
   try {
-    const token = await currentUser.getIdToken(forceRefresh);
+    const token = await user.getIdToken(forceRefresh);
 
     if (token) {
       // Cache the token and set its expiry time
@@ -269,6 +306,9 @@ export const getAuthToken = async (forceRefresh = false) => {
       const payloadBase64 = token.split(".")[1];
       const payload = JSON.parse(atob(payloadBase64));
       tokenExpiryTime = payload.exp * 1000; // Convert to milliseconds
+
+      // Store token expiry for PWA offline access
+      localStorage.setItem("tokenExpiry", tokenExpiryTime);
     }
 
     return token;
@@ -287,7 +327,33 @@ export const createAuthHeader = async () => {
 
 // Check if user is authenticated
 export const isAuthenticated = () => {
-  return !!currentUser;
+  // First check current user in memory
+  if (!!currentUser) return true;
+
+  // If no current user in memory but auth not initialized, check localStorage
+  if (localStorage.getItem("isAuthenticated") === "true") {
+    return true;
+  }
+
+  return false;
+};
+
+// Auto login from stored credentials for PWA
+export const tryAutoLogin = async () => {
+  // Check if we have stored auth data
+  if (localStorage.getItem("isAuthenticated") === "true" && auth?.currentUser) {
+    try {
+      // Force token refresh to verify validity
+      await getAuthToken(true);
+      return true;
+    } catch (error) {
+      console.error("Auto login failed:", error);
+      // Clear invalid auth data
+      localStorage.removeItem("isAuthenticated");
+      return false;
+    }
+  }
+  return false;
 };
 
 // Update UI based on authentication state
@@ -334,6 +400,9 @@ export const waitForAuthReady = (timeout = 5000) => {
       }
     }
 
+    // Try auto login for PWA persistence
+    await tryAutoLogin();
+
     // If already authenticated with a user, resolve after verifying token
     if (currentUser) {
       try {
@@ -349,7 +418,7 @@ export const waitForAuthReady = (timeout = 5000) => {
 
     // Set up a timeout ID that we can clear
     let timeoutId;
-    
+
     // Set up a one-time auth state changed listener
     const unsubscribe = authUtils.onAuthStateChanged(auth, async (user) => {
       // Clear the timeout since auth state has changed
@@ -382,20 +451,41 @@ export const waitForAuthReady = (timeout = 5000) => {
 
 // Handle protected pages with improved reliability
 export const protectPage = async () => {
-  // First check localStorage as a quick check
-  if (!localStorage.getItem("isAuthenticated")) {
+  // First check for stored authentication
+  if (isAuthenticated()) {
     // Now verify with waitForAuthReady for security
     const isAuthed = await waitForAuthReady(3000);
 
     if (!isAuthed) {
-      // Save current URL to redirect back after login
-      sessionStorage.setItem("redirectUrl", window.location.pathname);
-      window.location.href = "/login";
-      return false;
+      // Try auto login for PWA
+      const autoLoginSuccess = await tryAutoLogin();
+      if (!autoLoginSuccess) {
+        // Save current URL to redirect back after login
+        sessionStorage.setItem("redirectUrl", window.location.pathname);
+        window.location.href = "/login";
+        return false;
+      }
     }
+    return true;
   }
-  return true;
+
+  // If no stored auth, redirect to login
+  sessionStorage.setItem("redirectUrl", window.location.pathname);
+  window.location.href = "/login";
+  return false;
 };
+
+// Initialize auth on page load
+export const initializeOnPageLoad = () => {
+  document.addEventListener("DOMContentLoaded", async () => {
+    await initAuth();
+    // Try auto login for PWA support
+    await tryAutoLogin();
+  });
+};
+
+// Initialize auth immediately when this module is imported for PWA
+initAuth().catch((err) => console.error("Auth initialization error:", err));
 
 // Redirect to intended destination after login
 export const redirectAfterLogin = () => {

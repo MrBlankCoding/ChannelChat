@@ -1,7 +1,15 @@
 // login.js
-import { loginUser, redirectAfterLogin } from "./auth.js";
+import { loginUser, redirectAfterLogin, tryAutoLogin } from "./auth.js";
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
+  // Try auto login first for PWA
+  const autoLoginSuccess = await tryAutoLogin();
+  if (autoLoginSuccess) {
+    // Already logged in, redirect
+    redirectAfterLogin();
+    return;
+  }
+
   const loginForm = document.getElementById("loginForm");
   const emailInput = document.getElementById("email");
   const passwordInput = document.getElementById("password");
@@ -22,9 +30,12 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // Load remembered email if available
-  const rememberedEmail = localStorage.getItem("rememberedEmail");
+  const rememberedEmail = localStorage.getItem("lastLoginEmail");
   if (rememberedEmail) {
     emailInput.value = rememberedEmail;
+    rememberMeCheckbox.checked = localStorage.getItem("rememberMe") !== "false";
+  } else {
+    // Default remember me to checked for PWA
     rememberMeCheckbox.checked = true;
   }
 
@@ -61,18 +72,21 @@ document.addEventListener("DOMContentLoaded", () => {
     loadingSpinner.classList.remove("hidden");
 
     try {
+      // Set remember me preference before login attempt
+      localStorage.setItem(
+        "rememberMe",
+        rememberMeCheckbox.checked ? "true" : "false"
+      );
+
       // Attempt login
       const user = await loginUser(emailInput.value, passwordInput.value);
 
       // Handle remember me functionality
       if (rememberMeCheckbox.checked) {
-        localStorage.setItem("rememberedEmail", emailInput.value);
-        // Set a flag that the user wants to be remembered
-        localStorage.setItem("rememberMe", "true");
+        localStorage.setItem("lastLoginEmail", emailInput.value);
       } else {
         // Clear any previously remembered data
-        localStorage.removeItem("rememberedEmail");
-        localStorage.removeItem("rememberMe");
+        localStorage.removeItem("lastLoginEmail");
       }
 
       // Redirect user to the appropriate page

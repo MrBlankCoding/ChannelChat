@@ -6,6 +6,7 @@ import { waitForAuthReady, isAuthenticated } from "./auth.js";
 import { initFirebase } from "./firebaseConfig.js";
 import UserInviteManager from "./UserInviteManager.js";
 import authAxios from "./authAxios.js";
+import { initializeOnPageLoad } from "./auth.js";
 
 /**
  * Main application class responsible for coordinating all application components
@@ -18,6 +19,8 @@ class App {
     this.currentRoomId = this.extractRoomIdFromPath(this.currentPath);
     this.isRoomsView = this.currentPath === "/chat";
     this.currentUser = null;
+
+    initializeOnPageLoad();
 
     // Components
     this.wsManager = window.wsManager || null;
