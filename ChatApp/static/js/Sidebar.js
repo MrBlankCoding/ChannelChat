@@ -1,5 +1,9 @@
 import authAxios from "./authAxios.js";
 
+/**
+ * Sidebar component for chat application
+ * Handles room management and navigation
+ */
 class Sidebar {
   constructor() {
     this.wsManager = null;
@@ -11,6 +15,7 @@ class Sidebar {
     this.onRoomClickCallback = null;
     this.currentUser = null;
     this.rooms = [];
+    this.elements = {};
 
     // Bind methods that are used as callbacks
     this.handleWebSocketMessage = this.handleWebSocketMessage.bind(this);
@@ -24,38 +29,56 @@ class Sidebar {
     this.debouncedRoomsUpdate = this.debounce(this.loadRooms, 300);
   }
 
+  /**
+   * Extract active room ID from URL path
+   * @returns {string|null} Room ID or null if not found
+   */
   getActiveRoomId() {
     const match = window.location.pathname.match(/\/chat\/([^\/]+)/);
     return match ? match[1] : null;
   }
 
+  /**
+   * Set callback for room click events
+   * @param {Function} callback Function to call when room is clicked
+   */
   onRoomClick(callback) {
     if (typeof callback === "function") {
       this.onRoomClickCallback = callback;
     }
   }
 
+  /**
+   * Get all required DOM elements and initialize sidebar styling
+   */
   initializeElements() {
-    // Get DOM elements
-    this.sidebar = document.getElementById("sidebar");
-    this.toggleSidebar = document.getElementById("toggleSidebar");
-    this.closeSidebar = document.getElementById("closeSidebar");
-    this.roomsList = document.getElementById("roomsList");
-    this.actionButton = document.getElementById("actionButton");
-    this.dropdownMenu = document.getElementById("dropdownMenu");
-    this.roomModal = document.getElementById("roomModal");
-    this.createRoomBtn = document.getElementById("createRoomBtn");
-    this.joinRoomBtn = document.getElementById("joinRoomBtn");
-    this.createRoomForm = document.getElementById("createRoomForm");
-    this.joinRoomForm = document.getElementById("joinRoomForm");
-    this.confirmCreateRoom = document.getElementById("confirmCreateRoom");
-    this.confirmJoinRoom = document.getElementById("confirmJoinRoom");
-    this.newRoomName = document.getElementById("newRoomName");
-    this.roomCodeInput = document.getElementById("roomCodeInput");
+    // Define all required elements
+    const elementIds = [
+      "sidebar",
+      "toggleSidebar",
+      "closeSidebar",
+      "roomsList",
+      "actionButton",
+      "dropdownMenu",
+      "roomModal",
+      "createRoomBtn",
+      "joinRoomBtn",
+      "createRoomForm",
+      "joinRoomForm",
+      "confirmCreateRoom",
+      "confirmJoinRoom",
+      "newRoomName",
+      "roomCodeInput",
+    ];
+
+    // Get all elements and store in elements object
+    elementIds.forEach((id) => {
+      this.elements[id] = document.getElementById(id);
+    });
 
     // Set up sidebar styling
-    if (this.sidebar) {
-      this.sidebar.classList.add(
+    if (this.elements.sidebar) {
+      const sidebarClasses = [
         "bg-white",
         "dark:bg-gray-900",
         "transition-all",
@@ -71,15 +94,24 @@ class Sidebar {
         "shadow-lg",
         "border-r",
         "border-gray-200",
-        "dark:border-gray-700"
-      );
+        "dark:border-gray-700",
+      ];
+
+      this.elements.sidebar.classList.add(...sidebarClasses);
 
       if (this.isMobile) {
-        this.sidebar.classList.add("-translate-x-full");
+        this.elements.sidebar.classList.add("-translate-x-full");
       }
     }
   }
 
+  /**
+   * Initialize the sidebar component
+   * @param {Object} wsManager WebSocket manager instance
+   * @param {Object} currentUser Current user object
+   * @returns {boolean} True if initialization was successful
+   * @throws {Error} If WebSocket manager is not provided
+   */
   async initialize(wsManager, currentUser) {
     if (!wsManager) {
       throw new Error("WebSocket manager is required for initialization");
@@ -111,22 +143,40 @@ class Sidebar {
     }
   }
 
+  /**
+   * Handle visibility change event
+   * @param {boolean} isVisible Whether document is visible
+   */
   handleVisibilityChange(isVisible) {
     if (isVisible && !this.isLoading) {
       this.loadRooms();
     }
   }
 
+  /**
+   * Attach all event listeners for sidebar functionality
+   */
   attachEventListeners() {
+    const {
+      toggleSidebar,
+      closeSidebar,
+      createRoomBtn,
+      joinRoomBtn,
+      confirmCreateRoom,
+      confirmJoinRoom,
+      roomsList,
+      actionButton,
+    } = this.elements;
+
     // Sidebar toggle
-    if (this.toggleSidebar) {
-      this.toggleSidebar.addEventListener("click", () =>
+    if (toggleSidebar) {
+      toggleSidebar.addEventListener("click", () =>
         this.toggleSidebarVisibility()
       );
     }
 
-    if (this.closeSidebar) {
-      this.closeSidebar.addEventListener("click", () =>
+    if (closeSidebar) {
+      closeSidebar.addEventListener("click", () =>
         this.toggleSidebarVisibility(false)
       );
     }
@@ -135,34 +185,32 @@ class Sidebar {
     window.addEventListener("resize", this.debouncedResize);
 
     // Room management buttons
-    if (this.createRoomBtn) {
-      this.createRoomBtn.addEventListener("click", () =>
-        this.showModal("create")
-      );
+    if (createRoomBtn) {
+      createRoomBtn.addEventListener("click", () => this.showModal("create"));
     }
 
-    if (this.joinRoomBtn) {
-      this.joinRoomBtn.addEventListener("click", () => this.showModal("join"));
+    if (joinRoomBtn) {
+      joinRoomBtn.addEventListener("click", () => this.showModal("join"));
     }
 
     // Modal actions
-    if (this.confirmCreateRoom) {
-      this.confirmCreateRoom.addEventListener("click", () => this.createRoom());
+    if (confirmCreateRoom) {
+      confirmCreateRoom.addEventListener("click", () => this.createRoom());
     }
 
-    if (this.confirmJoinRoom) {
-      this.confirmJoinRoom.addEventListener("click", () => this.joinRoom());
+    if (confirmJoinRoom) {
+      confirmJoinRoom.addEventListener("click", () => this.joinRoom());
     }
 
     // Room list delegation
-    if (this.roomsList) {
-      this.roomsList.addEventListener("click", this.handleRoomItemClick);
-      this.roomsList.addEventListener("click", this.handleRoomAction);
+    if (roomsList) {
+      roomsList.addEventListener("click", this.handleRoomItemClick);
+      roomsList.addEventListener("click", this.handleRoomAction);
     }
 
     // Action button & dropdown
-    if (this.actionButton) {
-      this.actionButton.addEventListener("click", (e) => {
+    if (actionButton) {
+      actionButton.addEventListener("click", (e) => {
         e.stopPropagation();
         this.toggleDropdown();
       });
@@ -176,18 +224,23 @@ class Sidebar {
       }
 
       // Close dropdown when clicking outside
+      const { dropdownMenu, actionButton } = this.elements;
       if (
-        this.dropdownMenu &&
-        !this.dropdownMenu.classList.contains("hidden") &&
-        this.actionButton &&
-        !this.actionButton.contains(e.target) &&
-        !this.dropdownMenu.contains(e.target)
+        dropdownMenu &&
+        !dropdownMenu.classList.contains("hidden") &&
+        actionButton &&
+        !actionButton.contains(e.target) &&
+        !dropdownMenu.contains(e.target)
       ) {
-        this.dropdownMenu.classList.add("hidden");
+        dropdownMenu.classList.add("hidden");
       }
     });
   }
 
+  /**
+   * Handle click events on room items
+   * @param {Event} e Click event
+   */
   handleRoomItemClick(e) {
     const roomItem = e.target.closest(".room-item");
     if (roomItem && !e.target.closest(".delete-room, .leave-room")) {
@@ -211,6 +264,10 @@ class Sidebar {
     }
   }
 
+  /**
+   * Handle click events on room action buttons (delete/leave)
+   * @param {Event} e Click event
+   */
   handleRoomAction(e) {
     const deleteBtn = e.target.closest(".delete-room");
     const leaveBtn = e.target.closest(".leave-room");
@@ -241,6 +298,12 @@ class Sidebar {
     }
   }
 
+  /**
+   * Show confirmation modal for room actions
+   * @param {string} title Modal title
+   * @param {string} message Modal message
+   * @param {Function} actionCallback Function to call when action is confirmed
+   */
   confirmRoomAction(title, message, actionCallback) {
     const modal = document.createElement("div");
     modal.className =
@@ -274,6 +337,10 @@ class Sidebar {
     });
   }
 
+  /**
+   * Delete a room by ID
+   * @param {string} roomId Room ID to delete
+   */
   async deleteRoom(roomId) {
     try {
       await this.api.delete(`/rooms/${roomId}`);
@@ -289,6 +356,10 @@ class Sidebar {
     }
   }
 
+  /**
+   * Leave a room by ID
+   * @param {string} roomId Room ID to leave
+   */
   async leaveRoom(roomId) {
     try {
       await this.api.delete(`/rooms/${roomId}/leave`);
@@ -304,6 +375,11 @@ class Sidebar {
     }
   }
 
+  /**
+   * Show a toast notification
+   * @param {string} message Message to display
+   * @param {string} type Type of toast (error, success, etc.)
+   */
   showToast(message, type = "error") {
     const toast = document.createElement("div");
     const bgColor = type === "error" ? "bg-red-500" : "bg-blue-500";
@@ -322,42 +398,53 @@ class Sidebar {
     }, 3000);
   }
 
+  /**
+   * Get a copy of the rooms array
+   * @returns {Array} Copy of rooms array
+   */
   getRooms() {
     return this.rooms ? [...this.rooms] : [];
   }
 
+  /**
+   * Update active room UI
+   * @param {string} roomId Room ID to set as active
+   */
   updateActiveRoom(roomId) {
     this.activeRoomId = roomId;
 
-    if (!this.roomsList) return;
+    const { roomsList } = this.elements;
+    if (!roomsList) return;
+
+    const activeClasses = [
+      "bg-blue-50",
+      "dark:bg-blue-900/20",
+      "border-l-4",
+      "border-blue-500",
+    ];
+    const hoverClasses = ["hover:bg-gray-50", "dark:hover:bg-gray-800"];
 
     // Remove active class from all rooms
-    const rooms = this.roomsList.querySelectorAll(".room-item");
+    const rooms = roomsList.querySelectorAll(".room-item");
     rooms.forEach((room) => {
-      room.classList.remove(
-        "bg-blue-50",
-        "dark:bg-blue-900/20",
-        "border-l-4",
-        "border-blue-500"
-      );
-      room.classList.add("hover:bg-gray-50", "dark:hover:bg-gray-800");
+      room.classList.remove(...activeClasses);
+      room.classList.add(...hoverClasses);
     });
 
     // Add active class to selected room
-    const activeRoom = this.roomsList.querySelector(
-      `[data-room-id="${roomId}"]`
-    );
+    const activeRoom = roomsList.querySelector(`[data-room-id="${roomId}"]`);
     if (activeRoom) {
-      activeRoom.classList.add(
-        "bg-blue-50",
-        "dark:bg-blue-900/20",
-        "border-l-4",
-        "border-blue-500"
-      );
-      activeRoom.classList.remove("hover:bg-gray-50", "dark:hover:bg-gray-800");
+      activeRoom.classList.add(...activeClasses);
+      activeRoom.classList.remove(...hoverClasses);
     }
   }
 
+  /**
+   * Create a debounced version of a function
+   * @param {Function} func Function to debounce
+   * @param {number} wait Wait time in milliseconds
+   * @returns {Function} Debounced function
+   */
   debounce(func, wait) {
     let timeout;
     return (...args) => {
@@ -366,6 +453,9 @@ class Sidebar {
     };
   }
 
+  /**
+   * Load rooms from API
+   */
   async loadRooms() {
     if (this.isLoading) return;
     this.isLoading = true;
@@ -396,8 +486,13 @@ class Sidebar {
     }
   }
 
+  /**
+   * Update rooms list in UI
+   * @param {Array} rooms Array of room objects
+   */
   updateRoomsList(rooms) {
-    if (!this.roomsList) return;
+    const { roomsList } = this.elements;
+    if (!roomsList) return;
 
     const fragment = document.createDocumentFragment();
 
@@ -407,23 +502,35 @@ class Sidebar {
       fragment.appendChild(roomElement);
     });
 
-    // Replace contents in one operation
-    this.roomsList.innerHTML = "";
-    this.roomsList.appendChild(fragment);
+    // Replace contents in one operation for better performance
+    roomsList.innerHTML = "";
+    roomsList.appendChild(fragment);
   }
 
+  /**
+   * Create room element for display in UI
+   * @param {Object} room Room object
+   * @param {boolean} isActive Whether room is active
+   * @returns {HTMLElement} Room element
+   */
   createRoomElement(room, isActive) {
     const div = document.createElement("div");
     const isOwner =
       this.currentUser && room.created_by === this.currentUser.email;
 
-    div.className = `room-item relative transition-all duration-200 ${
-      isActive
-        ? "bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500"
-        : "hover:bg-gray-50 dark:hover:bg-gray-800"
-    } cursor-pointer flex items-center p-4 gap-3 group`;
+    const baseClasses =
+      "room-item relative transition-all duration-200 cursor-pointer flex items-center p-4 gap-3 group";
+    const activeClasses = isActive
+      ? "bg-blue-50 dark:bg-blue-900/20 border-l-4 border-blue-500"
+      : "hover:bg-gray-50 dark:hover:bg-gray-800";
 
+    div.className = `${baseClasses} ${activeClasses}`;
     div.dataset.roomId = room.id;
+
+    // Generate the appropriate action button based on ownership
+    const actionButton = isOwner
+      ? this.createDeleteButton()
+      : this.createLeaveButton();
 
     div.innerHTML = `
       <div class="flex-shrink-0 w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-medium">
@@ -434,92 +541,135 @@ class Sidebar {
           <h3 class="font-medium truncate dark:text-white">${room.name}</h3>
         </div>
       </div>
-      ${
-        isOwner
-          ? `<button class="delete-room absolute right-2 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 p-1 rounded transition-opacity" title="Delete Room">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
-            <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
-          </svg>
-        </button>`
-          : `<button class="leave-room absolute right-2 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-700 p-1 rounded transition-opacity" title="Leave Room">
-          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-            <path fill-rule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0v2z"/>
-            <path fill-rule="evenodd" d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3z"/>
-          </svg>
-        </button>`
-      }
+      ${actionButton}
     `;
 
     return div;
   }
 
+  /**
+   * Create delete button HTML
+   * @returns {string} Delete button HTML
+   */
+  createDeleteButton() {
+    return `<button class="delete-room absolute right-2 opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 p-1 rounded transition-opacity" title="Delete Room">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z"/>
+        <path fill-rule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z"/>
+      </svg>
+    </button>`;
+  }
+
+  /**
+   * Create leave button HTML
+   * @returns {string} Leave button HTML
+   */
+  createLeaveButton() {
+    return `<button class="leave-room absolute right-2 opacity-0 group-hover:opacity-100 text-gray-500 hover:text-gray-700 p-1 rounded transition-opacity" title="Leave Room">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+        <path fill-rule="evenodd" d="M10 12.5a.5.5 0 0 1-.5.5h-8a.5.5 0 0 1-.5-.5v-9a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 .5.5v2a.5.5 0 0 0 1 0v-2A1.5 1.5 0 0 0 9.5 2h-8A1.5 1.5 0 0 0 0 3.5v9A1.5 1.5 0 0 0 1.5 14h8a1.5 1.5 0 0 0 1.5-1.5v-2a.5.5 0 0 0-1 0v2z"/>
+        <path fill-rule="evenodd" d="M15.854 8.354a.5.5 0 0 0 0-.708l-3-3a.5.5 0 0 0-.708.708L14.293 7.5H5.5a.5.5 0 0 0 0 1h8.793l-2.147 2.146a.5.5 0 0 0 .708.708l3-3z"/>
+      </svg>
+    </button>`;
+  }
+
+  /**
+   * Toggle dropdown visibility
+   */
   toggleDropdown() {
-    if (this.dropdownMenu) {
-      this.dropdownMenu.classList.toggle("hidden");
+    const { dropdownMenu } = this.elements;
+    if (dropdownMenu) {
+      dropdownMenu.classList.toggle("hidden");
     }
   }
 
+  /**
+   * Toggle sidebar visibility
+   * @param {boolean} show Whether to show sidebar
+   */
   toggleSidebarVisibility(show) {
-    if (!this.sidebar) return;
+    const { sidebar } = this.elements;
+    if (!sidebar) return;
 
-    const isVisible =
-      show ?? this.sidebar.classList.contains("-translate-x-full");
-    this.sidebar.classList.toggle("-translate-x-full", !isVisible);
+    const isVisible = show ?? sidebar.classList.contains("-translate-x-full");
+    sidebar.classList.toggle("-translate-x-full", !isVisible);
   }
 
+  /**
+   * Handle responsive layout changes
+   */
   handleResponsiveLayout() {
-    if (!this.sidebar) return;
+    const { sidebar } = this.elements;
+    if (!sidebar) return;
 
     const wasMobile = this.isMobile;
     this.isMobile = window.innerWidth < 768;
 
     // Only update if state changed
     if (wasMobile !== this.isMobile) {
-      this.sidebar.classList.toggle("-translate-x-full", this.isMobile);
+      sidebar.classList.toggle("-translate-x-full", this.isMobile);
     }
   }
 
+  /**
+   * Show modal for creating or joining room
+   * @param {string} type Type of modal (create or join)
+   */
   showModal(type) {
-    if (!this.roomModal) return;
+    const {
+      roomModal,
+      createRoomForm,
+      joinRoomForm,
+      newRoomName,
+      roomCodeInput,
+    } = this.elements;
+    if (!roomModal) return;
 
-    this.roomModal.classList.remove("hidden");
+    roomModal.classList.remove("hidden");
 
-    if (this.createRoomForm) {
-      this.createRoomForm.classList.toggle("hidden", type !== "create");
+    if (createRoomForm) {
+      createRoomForm.classList.toggle("hidden", type !== "create");
     }
 
-    if (this.joinRoomForm) {
-      this.joinRoomForm.classList.toggle("hidden", type !== "join");
+    if (joinRoomForm) {
+      joinRoomForm.classList.toggle("hidden", type !== "join");
     }
 
     // Focus the appropriate input
-    if (type === "create" && this.newRoomName) {
-      this.newRoomName.focus();
-    } else if (type === "join" && this.roomCodeInput) {
-      this.roomCodeInput.focus();
+    if (type === "create" && newRoomName) {
+      newRoomName.focus();
+    } else if (type === "join" && roomCodeInput) {
+      roomCodeInput.focus();
     }
   }
 
+  /**
+   * Hide modal and reset form fields
+   */
   hideModal() {
-    if (this.roomModal) {
-      this.roomModal.classList.add("hidden");
+    const { roomModal, newRoomName, roomCodeInput } = this.elements;
+    if (roomModal) {
+      roomModal.classList.add("hidden");
     }
 
     // Reset input fields
-    if (this.newRoomName) {
-      this.newRoomName.value = "";
+    if (newRoomName) {
+      newRoomName.value = "";
     }
 
-    if (this.roomCodeInput) {
-      this.roomCodeInput.value = "";
+    if (roomCodeInput) {
+      roomCodeInput.value = "";
     }
   }
 
+  /**
+   * Create a new room
+   */
   async createRoom() {
-    if (!this.newRoomName) return;
+    const { newRoomName } = this.elements;
+    if (!newRoomName) return;
 
-    const name = this.newRoomName.value.trim();
+    const name = newRoomName.value.trim();
     if (!name) return;
 
     try {
@@ -532,10 +682,14 @@ class Sidebar {
     }
   }
 
+  /**
+   * Join an existing room
+   */
   async joinRoom() {
-    if (!this.roomCodeInput) return;
+    const { roomCodeInput } = this.elements;
+    if (!roomCodeInput) return;
 
-    const code = this.roomCodeInput.value.trim();
+    const code = roomCodeInput.value.trim();
     if (!code) return;
 
     try {
@@ -551,7 +705,10 @@ class Sidebar {
     }
   }
 
-  // This method is missing implementation in the original code
+  /**
+   * Handle WebSocket messages
+   * @param {Object} message WebSocket message
+   */
   handleWebSocketMessage(message) {
     // Handle WebSocket messages related to rooms
     if (message && message.type === "room_update") {
