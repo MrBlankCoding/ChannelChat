@@ -1,7 +1,7 @@
 import asyncio
 import json
 from datetime import datetime
-from typing import List
+from typing import Dict, List, Callable, Awaitable, Any, Optional
 
 import pymongo
 from bson import ObjectId
@@ -26,16 +26,35 @@ websocket_router = APIRouter()
 message_encryption = MessageEncryption()
 
 
-async def handle_presence_ping(manager, user_id: str, room_id: str):
-    """Handle presence ping with connection pooling."""
+# Define a type for message handlers
+MessageHandler = Callable[[Dict[str, Any]], Awaitable[Any]]
+
+
+async def handle_presence_ping(user_id: str, room_id: str) -> None:
+    """
+    Handle presence ping with connection pooling.
+    
+    Args:
+        user_id: The ID of the user sending the ping
+        room_id: The ID of the room the user is in
+    """
     await manager.update_presence(user_id, room_id, "active")
 
 
-async def handle_presence_update(manager, data: dict, user_id: str, room_id: str):
-    """Handle presence update with connection pooling."""
+async def handle_presence_update(data: dict, user_id: str, room_id: str) -> None:
+    """
+    Handle presence update with connection pooling.
+    
+    Args:
+        data: The presence data containing status and timestamp information
+        user_id: The ID of the user updating their presence
+        room_id: The ID of the room the user is in
+    """
     status = data.get("status")
 
     # Handle the timestamp properly - extract from last_active string if timestamp not provided
+    last_active = datetime.utcnow()  # Default value
+    
     if timestamp := data.get("timestamp"):
         last_active = datetime.fromtimestamp(timestamp / 1000)
     elif last_active_str := data.get("last_active"):
@@ -43,65 +62,80 @@ async def handle_presence_update(manager, data: dict, user_id: str, room_id: str
             # Parse ISO format string to datetime
             last_active = datetime.fromisoformat(last_active_str.replace("Z", "+00:00"))
         except (ValueError, TypeError):
-            # Fallback to current time if parsing fails
-            last_active = datetime.utcnow()
-    else:
-        # Use current time if no timestamp data available
-        last_active = datetime.utcnow()
+            pass  # Use default value if parsing fails
 
     # Update presence directly with the ConnectionManager
     await manager.update_presence(user_id, room_id, status, last_active)
 
 
-async def handle_typing_status(manager, message_data: dict, user: dict, room_id: str):
-    """Handle typing status with connection pooling."""
+async def handle_typing_status(data: dict, user: dict, room_id: str) -> None:
+    """
+    Handle typing status with connection pooling.
+    
+    Args:
+        data: The typing status data
+        user: The user sending the typing status
+        room_id: The ID of the room the user is in
+    """
     typing_status = {
         "type": "typing_status",
         "username": user["username"],
-        "is_typing": message_data.get("is_typing", False),
+        "is_typing": data.get("is_typing", False),
     }
     await manager.broadcast(typing_status, room_id)
 
 
-async def handle_emoji_reaction(
-        manager, db, message_data: dict, user: dict, room_id: str
-):
-    """Handle emoji reactions with connection pooling."""
-    message_id = message_data.get("message_id")
-    emoji = message_data.get("emoji")
+async def handle_emoji_reaction(data: dict, user: dict, room_id: str) -> None:
+    """
+    Handle emoji reactions with connection pooling.
+    
+    Args:
+        data: The emoji reaction data (message_id and emoji)
+        user: The user adding the reaction
+        room_id: The ID of the room containing the message
+    """
+    message_id = data.get("message_id")
+    emoji = data.get("emoji")
+    
+    if not message_id or not emoji:
+        return
 
-    async with db.get_client() as client:
-        database = await db.db
-        try:
-            await database.messages.update_one(
-                {"_id": ObjectId(message_id)},
-                {"$addToSet": {f"reactions.{emoji}": user["username"]}},
-            )
+    database = await db.db
+    try:
+        await database.messages.update_one(
+            {"_id": ObjectId(message_id)},
+            {"$addToSet": {f"reactions.{emoji}": user["username"]}},
+        )
 
-            await manager.broadcast(
-                {
-                    "type": "emoji_reaction",
-                    "message_id": message_id,
-                    "emoji": emoji,
-                    "username": user["username"],
-                },
-                room_id,
-            )
-        except (pymongo.errors.PyMongoError, asyncio.TimeoutError) as e:
-            print(f"Error adding emoji reaction: {e}")
+        await manager.broadcast(
+            {
+                "type": "emoji_reaction",
+                "message_id": message_id,
+                "emoji": emoji,
+                "username": user["username"],
+            },
+            room_id,
+        )
+    except (pymongo.errors.PyMongoError, asyncio.TimeoutError) as e:
+        print(f"Error adding emoji reaction: {e}")
 
 
 async def handle_message_edit(
-        manager,
-        db,
-        message_data: dict,
-        user_id: str,
-        room_id: str,
-        message_encryption,
-):
-    """Handle message editing with connection pooling."""
-    message_id = message_data.get("message_id")
-    new_content = message_data.get("content")
+    data: dict, user_id: str, room_id: str
+) -> None:
+    """
+    Handle message editing with connection pooling.
+    
+    Args:
+        data: The message edit data (message_id, new content, etc)
+        user_id: The ID of the user editing the message
+        room_id: The ID of the room containing the message
+    """
+    message_id = data.get("message_id")
+    new_content = data.get("content")
+    
+    if not message_id or not new_content:
+        return
 
     database = await db.db
     message = await database.messages.find_one({"_id": ObjectId(message_id)})
@@ -120,7 +154,8 @@ async def handle_message_edit(
             "edited_at": datetime.utcnow(),
         }
 
-        if reply_to := message_data.get("reply_to"):
+        # Process reply content if present
+        if reply_to := data.get("reply_to"):
             if reply_to.get("content"):
                 encrypted_reply, reply_nonce = await asyncio.to_thread(
                     message_encryption.encrypt_message,
@@ -133,6 +168,7 @@ async def handle_message_edit(
                         "nonce": reply_nonce,
                     }
                 )
+            update_data["reply_to"] = reply_to
 
         await database.messages.update_one(
             {"_id": ObjectId(message_id)}, {"$set": update_data}
@@ -153,10 +189,20 @@ async def handle_message_edit(
 
 
 async def handle_message_delete(
-        manager, db, message_data: dict, user_id: str, room_id: str
-):
-    """Handle message deletion with connection pooling."""
-    message_id = message_data.get("message_id")
+    data: dict, user_id: str, room_id: str
+) -> None:
+    """
+    Handle message deletion with connection pooling.
+    
+    Args:
+        data: The message delete data (message_id)
+        user_id: The ID of the user deleting the message
+        room_id: The ID of the room containing the message
+    """
+    message_id = data.get("message_id")
+    
+    if not message_id:
+        return
 
     database = await db.db
     message = await database.messages.find_one({"_id": ObjectId(message_id)})
@@ -170,11 +216,21 @@ async def handle_message_delete(
 
 
 async def handle_read_receipt(
-        manager, db, user_id: str, room_id: str, message_ids: List[str]
-):
-    """Handle marking messages as read with optimized performance."""
+    user_id: str, room_id: str, message_ids: List[str]
+) -> dict:
+    """
+    Handle marking messages as read with optimized performance.
+    
+    Args:
+        user_id: The ID of the user marking messages as read
+        room_id: The ID of the room containing the messages
+        message_ids: The IDs of the messages to mark as read
+        
+    Returns:
+        Dictionary with update results
+    """
     if not message_ids:
-        return  # Early return if no messages to update
+        return {"updated": 0}  # Early return if no messages to update
 
     try:
         # Get database connection once
@@ -226,8 +282,19 @@ async def handle_read_receipt(
         return {"error": "Failed to update read status"}
 
 
-async def process_reply_content(reply_to, message_encryption, room_id):
-    """Process reply content with connection pooling."""
+async def process_reply_content(
+    reply_to: dict, room_id: str
+) -> Optional[dict]:
+    """
+    Process reply content with connection pooling.
+    
+    Args:
+        reply_to: The reply data to process
+        room_id: The ID of the room for decryption
+        
+    Returns:
+        Processed reply data or None if invalid
+    """
     if not reply_to:
         return None
 
@@ -237,6 +304,7 @@ async def process_reply_content(reply_to, message_encryption, room_id):
         if not message_id:
             raise ValueError("Missing message ID in reply_to data")
 
+        # Decrypt reply content if necessary
         if reply_to.get("nonce"):
             decrypted_reply_content = await asyncio.to_thread(
                 message_encryption.decrypt_message,
@@ -256,6 +324,7 @@ async def process_reply_content(reply_to, message_encryption, room_id):
         }
     except Exception as e:
         print(f"Error processing reply content: {e}")
+        # Return a basic error structure to maintain consistency
         return {
             "message_id": message_id if "message_id" in locals() else None,
             "content": "Error processing reply content",
@@ -264,83 +333,89 @@ async def process_reply_content(reply_to, message_encryption, room_id):
 
 
 async def handle_new_message(
-        manager,
-        db,
-        message_data: dict,
-        user: dict,
-        room: dict,
-        room_id: str,
-        message_encryption,
-):
-    """Handle new messages with compression, encryption, and push notifications."""
+    data: dict, user: dict, room: dict, room_id: str
+) -> Optional[dict]:
+    """
+    Handle new messages with compression, encryption, and push notifications.
+    
+    Args:
+        data: The message data
+        user: The user sending the message
+        room: The room the message is being sent to
+        room_id: The ID of the room
+        
+    Returns:
+        The broadcast message or None if there was an error
+    """
     database = await db.db
     reply_content = None
 
     try:
-        if 'content' not in message_data:
+        if 'content' not in data:
             raise ValueError("Message content is required")
 
-        message_type = message_data.get("message_type", "text")
+        message_type = data.get("message_type", "text")
 
         # Process reply_to data if present
-        if message_data.get("reply_to"):
+        if data.get("reply_to"):
             # Ensure reply_to has consistent message ID field
-            reply_to_data = message_data["reply_to"]
+            reply_to_data = data["reply_to"]
             if "id" in reply_to_data and "message_id" not in reply_to_data:
                 reply_to_data["message_id"] = reply_to_data["id"]
 
+        # Separate variable for content to avoid modifying the original
+        content_to_store = data["content"]
+        
         # Don't compress images or very short messages
-        if message_type == "text" and len(message_data["content"]) >= 100:
+        is_compressed = False
+        if message_type == "text" and len(content_to_store) >= 100:
             compressed_content, is_compressed = message_compression.compress_message(
-                message_data["content"]
+                content_to_store
             )
-            message_data["content"] = compressed_content
-        else:
-            is_compressed = False
+            content_to_store = compressed_content
 
-        # Existing encryption logic
+        # Process based on message type
         if message_type == "image":
-            encrypted_content = message_data["content"]
+            encrypted_content = content_to_store
             nonce = None
             encrypted = False
 
-            if message_data.get("reply_to"):
-                reply_content = await process_reply_content(
-                    message_data.get("reply_to"), message_encryption, room_id
-                )
+            # Process reply separately if needed
+            if data.get("reply_to"):
+                reply_content = await process_reply_content(data.get("reply_to"), room_id)
         else:
+            # For text messages, handle encryption and reply processing concurrently
             tasks = []
 
-            if message_data["content"]:
+            if content_to_store:
                 tasks.append(
                     asyncio.to_thread(
                         message_encryption.encrypt_message,
-                        message_data["content"],
+                        content_to_store,
                         room_id,
                     )
                 )
 
-            if message_data.get("reply_to"):
+            if data.get("reply_to"):
                 tasks.append(
-                    process_reply_content(
-                        message_data.get("reply_to"), message_encryption, room_id
-                    )
+                    process_reply_content(data.get("reply_to"), room_id)
                 )
 
+            # Execute tasks concurrently
             results = await asyncio.gather(*tasks)
 
+            # Unpack results based on which tasks were executed
             if len(tasks) == 2:
-                content, reply_content = results
-            elif message_data.get("reply_to"):
+                (encrypted_content, nonce), reply_content = results
+            elif data.get("reply_to"):
                 reply_content = results[0]
-                content = (None, None)
+                encrypted_content, nonce = None, None
             else:
-                content = results[0]
+                encrypted_content, nonce = results[0]
 
-            encrypted_content, nonce = content
             encrypted = True
 
-        # Add compression flag to message document
+        # Create the message document
         message = {
             "content": encrypted_content,
             "nonce": nonce,
@@ -352,37 +427,42 @@ async def handle_new_message(
             "encrypted": encrypted,
             "compressed": is_compressed,
             "message_type": message_type,
-            "reply_to": message_data.get("reply_to"),
+            "reply_to": data.get("reply_to"),
             "read_by": [str(user["_id"])],
         }
 
+        # Use write concern for optimized performance
         write_concern = WriteConcern(w=1, j=False)
         coll = database.get_collection('messages', write_concern=write_concern)
 
         result = await coll.insert_one(message)
         message["_id"] = result.inserted_id
 
+        # Process content for broadcasting
         if message_type == "image":
             decrypted_content = encrypted_content
         else:
-            decrypted_content = await asyncio.to_thread(
-                message_encryption.decrypt_message,
-                encrypted_content,
-                nonce,
-                room_id,
-            ) if encrypted_content else ""
-
-            # Decompress after decryption if needed
-            if is_compressed:
-                decrypted_content = message_compression.decompress_message(
-                    decrypted_content, True
+            decrypted_content = ""
+            if encrypted_content:
+                decrypted_content = await asyncio.to_thread(
+                    message_encryption.decrypt_message,
+                    encrypted_content,
+                    nonce,
+                    room_id,
                 )
 
+                # Decompress after decryption if needed
+                if is_compressed:
+                    decrypted_content = message_compression.decompress_message(
+                        decrypted_content, True
+                    )
+
+        # Create broadcast message
         broadcast_message = {
             "type": "message",
             "message_type": message_type,
             "id": str(message["_id"]),
-            "temp_id": message_data.get("temp_id"),
+            "temp_id": data.get("temp_id"),
             "content": decrypted_content,
             "username": message["username"],
             "timestamp": message["timestamp"].isoformat(),
@@ -392,12 +472,13 @@ async def handle_new_message(
             "read_by": message["read_by"],
         }
 
+        # Create broadcast task to avoid blocking
         asyncio.create_task(manager.broadcast(broadcast_message, room_id))
 
         # Import here to avoid circular dependency
         from ChatApp.push_notif_service import send_message_notifications
 
-        # Send push notifications to users in the room who are not the sender
+        # Create notification task to avoid blocking
         asyncio.create_task(
             send_message_notifications(
                 database,
@@ -414,11 +495,17 @@ async def handle_new_message(
         print(f"Message handling error: {str(e)}")
         import traceback
         print(traceback.format_exc())
-        raise
+        return None
 
 
-async def handle_disconnect(manager, user_id: str, room_id: str):
-    """Optimized disconnect handler"""
+async def handle_disconnect(user_id: str, room_id: str) -> None:
+    """
+    Optimized disconnect handler
+    
+    Args:
+        user_id: The ID of the user disconnecting
+        room_id: The ID of the room the user was in
+    """
     if user_id:
         # Update presence first, then broadcast
         await manager.update_presence(user_id, room_id, "offline")
@@ -439,17 +526,23 @@ async def handle_disconnect(manager, user_id: str, room_id: str):
 
 @websocket_router.websocket("/ws/{token}/{room_id}")
 async def websocket_endpoint(websocket: WebSocket, token: str, room_id: str):
-    """WebSocket endpoint with Firebase token verification."""
+    """
+    WebSocket endpoint with Firebase token verification.
+    
+    Args:
+        websocket: The WebSocket connection
+        token: The Firebase authentication token
+        room_id: The ID of the room to connect to
+    """
     user_id = None
+    user = None
+    room = None
 
     # Accept connection first to prevent "need to call accept first" error
     await websocket.accept()
 
-    # Create handler mapping outside the loop for better performance
-    handlers = None
-
     try:
-        # Now verify Firebase token
+        # Verify Firebase token
         try:
             # Decode the Firebase ID token
             decoded_token = firebase_auth.verify_id_token(token)
@@ -458,7 +551,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str, room_id: str):
             # Get database connection
             database = await db.db
 
-            # Concurrent fetch of user and room data
+            # Fetch user and room data concurrently
             user, room = await asyncio.gather(
                 database.users.find_one({"firebase_uid": firebase_uid}),
                 database.rooms.find_one({"_id": ObjectId(room_id)}),
@@ -471,7 +564,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str, room_id: str):
 
             user_id = str(user["_id"])
 
-            # Now register with the ConnectionManager
+            # Register with the ConnectionManager
             await manager.connect(websocket, user_id, room_id)
 
         except firebase_auth.InvalidIdTokenError as e:
@@ -479,26 +572,17 @@ async def websocket_endpoint(websocket: WebSocket, token: str, room_id: str):
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
 
-        # Create handlers mapping once - better performance than recreating each loop
-        handlers = {
-            "typing_status": lambda data: handle_typing_status(
-                manager, data, user, room_id
-            ),
-            "add_emoji_reaction": lambda data: handle_emoji_reaction(
-                manager, db, data, user, room_id
-            ),
-            "edit_message": lambda data: handle_message_edit(
-                manager, db, data, user_id, room_id, message_encryption
-            ),
-            "delete_message": lambda data: handle_message_delete(
-                manager, db, data, user_id, room_id
-            ),
+        # Create message handler mapping - more efficient than if/else chains
+        handlers: Dict[str, MessageHandler] = {
+            "typing_status": lambda data: handle_typing_status(data, user, room_id),
+            "add_emoji_reaction": lambda data: handle_emoji_reaction(data, user, room_id),
+            "edit_message": lambda data: handle_message_edit(data, user_id, room_id),
+            "delete_message": lambda data: handle_message_delete(data, user_id, room_id),
             "read_receipt": lambda data: handle_read_receipt(
-                manager, db, user_id, room_id, data.get("message_ids", [])
+                user_id, room_id, data.get("message_ids", [])
             ),
-            "presence_update": lambda data: handle_presence_update(
-                manager, data, user_id, room_id
-            ),
+            "presence_update": lambda data: handle_presence_update(data, user_id, room_id),
+            "message": lambda data: handle_new_message(data, user, room, room_id),
         }
 
         # Message handling loop
@@ -507,7 +591,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str, room_id: str):
 
             # Fast path for ping messages
             if data == "ping":
-                await handle_presence_ping(manager, user_id, room_id)
+                await handle_presence_ping(user_id, room_id)
                 continue
 
             try:
@@ -515,40 +599,20 @@ async def websocket_endpoint(websocket: WebSocket, token: str, room_id: str):
                 message_data = json.loads(data)
                 message_type = message_data.get("type")
 
-                # Handle special message types efficiently
-                if message_type in handlers:
-                    await handlers[message_type](message_data)
-                    continue
-
-                # Process regular messages
-                if message_type == "message":
-                    # Fast validation check
-                    if "content" not in message_data:
-                        await websocket.send_json(
-                            {
-                                "type": "error",
-                                "message": "Message missing required 'content' field",
-                            }
-                        )
-                        continue
-
+                # Handle message using appropriate handler from mapping
+                if handler := handlers.get(message_type):
                     # Process message in a way that allows concurrent message handling
-                    asyncio.create_task(
-                        handle_new_message(
-                            manager,
-                            db,
-                            message_data,
-                            user,
-                            room,
-                            room_id,
-                            message_encryption,
-                        )
-                    )
+                    if message_type == "message":
+                        # Important messages are processed in background tasks
+                        asyncio.create_task(handler(message_data))
+                    else:
+                        # Process other messages directly
+                        await handler(message_data)
                 else:
                     print(f"Unhandled message type: {message_type}")
 
             except json.JSONDecodeError:
-                # Fast error path - don't do expensive processing
+                # Ignore invalid JSON
                 continue
             except Exception as e:
                 print(f"Error processing message: {str(e)}")
@@ -556,8 +620,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str, room_id: str):
 
     except WebSocketDisconnect:
         if user_id:
-            await handle_disconnect(manager, user_id, room_id)
+            await handle_disconnect(user_id, room_id)
     except Exception as e:
         print(f"Websocket error: {str(e)}")
         if user_id:
-            await handle_disconnect(manager, user_id, room_id)
+            await handle_disconnect(user_id, room_id)
