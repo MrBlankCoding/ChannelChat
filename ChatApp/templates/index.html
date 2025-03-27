@@ -1,206 +1,105 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Channel</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="icon" href="/static/favicon.ico" />
-    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-    <script>
-        tailwind.config = {
-            theme: {
-                extend: {
-                    colors: {
-                        'deep-navy': '#0A1E3C',
-                        'electric-blue': '#1E90FF',
-                        'soft-blue': '#4D7CFE',
-                        'dark-slate': '#1F2937',
-                        'accent-cyan': '#00FFD4',
-                        'message-blue': '#2C5282',
-                        'message-gray': '#4A5568',
-                        'light-background': '#F3F4F6',
-                        'light-text': '#1F2937'
-                    },
-                    backgroundImage: {
-                        'gradient-primary': 'linear-gradient(135deg, #1E90FF 0%, #4D7CFE 100%)',
-                        'gradient-secondary': 'linear-gradient(135deg, #00FFD4 0%, #4D7CFE 100%)',
-                        'chat-pattern': 'linear-gradient(to bottom right, rgba(75, 124, 254, 0.1) 0%, rgba(0, 255, 212, 0.1) 100%)',
-                        'glass-gradient': 'linear-gradient(to right bottom, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.05))'
-                    },
-                    boxShadow: {
-                        'message-shadow': '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                        'card-hover': '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-                        'glass': '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
-                    }
-                }
-            }
-        }
-    </script>
-    <style>
-        @keyframes float { 0% { transform: translateY(0px); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0px); } }
-        .floating-element { animation: float 4s ease-in-out infinite; }
-        .message-bubble { max-width: 80%; word-wrap: break-word; }
-        html { scroll-behavior: smooth; }
-        /* Added glowing effect for interactive elements */
-        .glow-effect { 
-            transition: all 0.3s ease;
-        }
-        .glow-effect:hover {
-            box-shadow: 0 0 15px rgba(77, 124, 254, 0.5);
-            transform: scale(1.05);
-        }
-    </style>
-</head>
-<body 
-    x-data="{ 
-        darkMode: localStorage.getItem('darkMode') === 'true', 
-        mobileMenuOpen: false,
-        toggleDarkMode() {
-            this.darkMode = !this.darkMode;
-            localStorage.setItem('darkMode', this.darkMode);
-            document.documentElement.classList.toggle('dark');
-        }
-    }" 
-    :class="{ 'dark': darkMode }"
-    class="bg-white dark:bg-deep-navy text-gray-900 dark:text-white font-sans antialiased overflow-x-hidden transition-colors duration-300">
+{% extends 'base.html' %}
+{% block content %}
 
-    <!-- Mobile Menu -->
+<!-- Mobile Menu -->
+<div 
+    x-show="mobileMenuOpen" 
+    x-transition.opacity.scale 
+    class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm md:hidden"
+    @click="mobileMenuOpen = false">
     <div 
-        x-show="mobileMenuOpen" 
-        x-transition 
-        class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm md:hidden"
-        @click="mobileMenuOpen = false">
-        <div 
-            class="bg-white dark:bg-dark-slate w-3/4 h-full p-6 shadow-2xl"
-            @click.stop>
-            <div class="flex justify-between items-center mb-8">
+        class="bg-white dark:bg-dark-slate w-4/5 h-full p-6 shadow-2xl transform transition-all duration-300 ease-in-out"
+        @click.stop>
+        <div class="flex justify-between items-center mb-8">
+            <span class="text-2xl font-bold dark:text-white">Channel</span>
+            <button @click="mobileMenuOpen = false" class="text-gray-600 dark:text-white hover:text-red-500 transition">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
+        </div>
+        <nav class="space-y-4">
+            <a href="/login" class="block text-gray-600 dark:text-white hover:text-electric-blue transition font-medium p-2 rounded-md">
+                Login
+            </a>
+        </nav>
+    </div>
+</div>
+
+<div class="min-h-screen flex flex-col relative bg-gradient-to-br from-white to-blue-50 dark:from-deep-navy">
+    <!-- Navigation -->
+    <nav class="sticky top-0 z-40 bg-white/90 dark:bg-deep-navy/90 backdrop-blur-md shadow-sm">
+        <div class="container mx-auto px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-4">
+                <div class="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center shadow-lg">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
+                    </svg>
+                </div>
                 <span class="text-2xl font-bold dark:text-white">Channel</span>
-                <button @click="mobileMenuOpen = false" class="text-gray-600 dark:text-white">
+            </div>
+            <div class="hidden md:flex space-x-6 items-center">
+                <button 
+                    @click="toggleDarkMode()"
+                    class="text-gray-600 dark:text-gray-300 hover:text-electric-blue transition p-2 rounded-full">
+                    <svg x-show="!darkMode" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
+                    </svg>
+                    <svg x-show="darkMode" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+                <a href="/login" class="bg-gradient-primary text-white px-4 py-2 rounded-full hover:opacity-90 transition shadow-lg">
+                    Login
+                </a>
+            </div>
+            <div class="md:hidden">
+                <button @click="mobileMenuOpen = true" class="text-gray-600 dark:text-white">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
                     </svg>
                 </button>
             </div>
-            <nav class="space-y-4">
-                <a href="#features" class="block py-2 hover:text-electric-blue" @click="mobileMenuOpen = false">Features</a>
-                <a href="#security" class="block py-2 hover:text-electric-blue" @click="mobileMenuOpen = false">Security</a>
-                <a href="#pricing" class="block py-2 hover:text-electric-blue" @click="mobileMenuOpen = false">Pricing</a>
-                <a href="#testimonials" class="block py-2 hover:text-electric-blue" @click="mobileMenuOpen = false">Testimonials</a>
-                <button 
-                    @click="toggleDarkMode(); mobileMenuOpen = false"
-                    class="w-full text-left py-2 hover:text-electric-blue">
-                    Toggle Dark Mode
-                </button>
-            </nav>
         </div>
-    </div>
-    <div class="min-h-screen flex flex-col relative bg-gradient-to-br from-white to-blue-50 dark:from-deep-navy">
-        <!-- Navigation (Improved with more subtle hover effects) -->
-        <nav class="sticky top-0 z-40 bg-white/80 dark:bg-deep-navy/80 backdrop-blur-md shadow-sm">
-            <div class="container mx-auto px-6 py-4 flex justify-between items-center">
-                <div class="flex items-center space-x-4">
-                    <div class="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center glow-effect">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
-                        </svg>
-                    </div>
-                    <span class="text-2xl font-bold dark:text-white">Channel</span>
-                </div>
-                <div class="hidden md:flex space-x-6 items-center">
-                    <button 
-                        @click="toggleDarkMode()"
-                        class="text-gray-600 dark:text-gray-300 hover:text-electric-blue transition glow-effect p-2 rounded-full">
-                        <svg x-show="!darkMode" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-                        </svg>
-                        <svg x-show="darkMode" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                    <a href="/login" class="bg-gradient-primary text-white px-4 py-2 rounded-full hover:opacity-90 transition glow-effect">
-                        Login
-                    </a>
-                </div>
-                <div class="md:hidden">
-                    <button @click="mobileMenuOpen = true" class="text-gray-600 dark:text-white">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-                        </svg>
-                    </button>
-                </div>
-            </div>
-        </nav>
+    </nav>
 
-        <!-- Hero Section (Improved with more depth and contrast) -->
-        <header class="relative z-10 container mx-auto px-6 py-16 md:py-24 grid md:grid-cols-2 items-center gap-12">
-            <div class="space-y-6">
-                <div class="bg-gradient-primary inline-block px-4 py-2 rounded-full text-white text-sm font-medium mb-4">
-                    Secure Communication Reimagined
-                </div>
-                <h1 class="text-5xl md:text-6xl font-bold mb-6 text-dark-slate dark:text-white leading-tight">
-                    Enterprise-Grade <br />Messaging Platform
-                </h1>
-                <p class="text-xl text-gray-600 dark:text-gray-300 mb-10 max-w-xl">
-                    Combining military-level encryption with an intuitive interface. Protect your conversations across all devices with cutting-edge security.
-                </p>
-                <div class="flex space-x-4">
-                    <a href="/register" class="bg-gradient-primary text-white font-bold py-4 px-8 rounded-lg hover:opacity-90 transition flex items-center space-x-2 glow-effect">
-                        <span>Get Started</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                    </a>
-                    <a href="#" class="bg-gray-100 dark:bg-dark-slate text-dark-slate dark:text-white font-bold py-4 px-8 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition glow-effect">
-                        Download App
-                    </a>
-                </div>
+    <!-- Hero Section -->
+    <header class="relative z-10 container mx-auto px-6 py-16 md:py-24 grid md:grid-cols-2 items-center gap-12">
+        <div class="space-y-6">
+            <div class="bg-gradient-primary inline-block px-4 py-2 rounded-full text-white text-sm font-medium mb-4 shadow-md">
+                Secure Communication Reimagined
             </div>
-            <div class="hidden md:block relative">
-                <div class="bg-gradient-to-br from-electric-blue to-soft-blue rounded-3xl p-6 shadow-2xl floating-element">
-                    <div class="bg-dark-slate/50 rounded-2xl p-4">
-                        <div class="flex items-center mb-4">
-                            <img src="/static/images/default-profile.png" alt="Profile" class="w-10 h-10 rounded-full mr-3">
-                            <div>
-                                <p class="font-semibold text-white">Alice Johnson</p>
-                                <p class="text-xs text-gray-400">Online</p>
-                            </div>
-                        </div>
-                        <div class="space-y-2">
-                            <div class="bg-message-blue text-white rounded-2xl px-4 py-2 self-start max-w-xs message-bubble">
-                                Hey, how's the project coming along?
-                            </div>
-                            <div class="bg-message-gray text-white rounded-2xl px-4 py-2 self-end max-w-xs ml-auto message-bubble">
-                                Almost done! I'll send the final draft soon.
-                            </div>
-                        </div>
-                    </div>
-                </div>
+            <h1 class="text-5xl md:text-6xl font-bold mb-6 text-dark-slate dark:text-white leading-tight">
+                Enterprise-Grade <br />Messaging Platform
+            </h1>
+            <p class="text-xl text-gray-600 dark:text-gray-300 mb-10 max-w-xl">
+                Combining military-level encryption with an intuitive interface. Protect your conversations across all devices with cutting-edge security.
+            </p>
+            <div class="flex space-x-4">
+                <a href="/register" class="bg-gradient-primary text-white font-bold py-4 px-8 rounded-lg hover:opacity-90 transition shadow-lg">
+                    Get Started
+                </a>
+                <a href="#" class="bg-gray-100 dark:bg-dark-slate text-dark-slate dark:text-white font-bold py-4 px-8 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition shadow-md">
+                    Download App
+                </a>
             </div>
-        </header>
+        </div>
+    </header>
+</div>
 
-        <!-- Footer (Updated with GitHub link) -->
-        <footer class="relative z-10 bg-deep-navy py-12">
-            <div class="container mx-auto px-6">
-                <div class="mt-12 pt-8 border-t border-gray-800 flex justify-between items-center">
-                    <div class="flex items-center space-x-4">
-                        <div class="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
-                            </svg>
-                        </div>
-                        <span className="text-white font-bold">© 2025 Channel. All rights reserved.</span>
-                    </div>
-                    <div class="flex space-x-4">
-                        <a href="https://github.com/MrBlankCoding/ChannelChat" class="text-gray-400 hover:text-electric-blue glow-effect p-2 rounded-full">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
-                            </svg>
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </footer>
-    </div>
-</body>
-</html>
+<script type="module">
+import { waitForAuthReady } from '/static/js/auth.js';
+
+document.addEventListener('DOMContentLoaded', async () => {
+    try {
+        const isAuthenticated = await waitForAuthReady();
+        if (isAuthenticated) {
+            window.location.href = '/chat';
+        }
+    } catch (error) {
+        console.error('Authentication check failed', error);
+    }
+});
+</script>
+
+{% endblock %}

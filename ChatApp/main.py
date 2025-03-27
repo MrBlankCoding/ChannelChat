@@ -115,6 +115,8 @@ app.include_router(websocket_router)
 app.include_router(message_fetching_router)
 
 # uvicorn main:app --host 127.0.0.1 --port 8080 --ssl-keyfile=key.pem --ssl-certfile=cert.pem --reload --log-level debug
+#For tailwind 
+#npx @tailwindcss/cli -i ./static/css/input.css -o ./static/css/output.css --watch
 if __name__ == "__main__":
     import os
     import uvicorn
