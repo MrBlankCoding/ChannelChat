@@ -1,55 +1,219 @@
-{% extends 'base.html' %}
-{% block content %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Channel Chat: Secure Messaging Reimagined</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+    <title>Channel Chat</title>
 
-<!-- Mobile Menu -->
-<div 
-    x-show="mobileMenuOpen" 
-    x-transition.opacity.scale 
-    class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm md:hidden"
-    @click="mobileMenuOpen = false">
+    <!-- PWA & Mobile Optimization -->
+    <meta name="theme-color" content="#3B82F6" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Channel Chat" />
+
+    <!-- Manifest & Icons -->
+    <link rel="manifest" href="/static/manifest.json" />
+    <link rel="icon" href="/static/favicon.ico" />
+    <link rel="apple-touch-icon" href="/static/images/manifest-icon-192.maskable.png" />
+
+    <!-- SEO Meta Tags -->
+    <meta name="description" content="Channel Chat – A secure, real-time chat app with encrypted messaging." />
+    <meta name="keywords" content="chat, real-time chat, messaging, secure messaging, encrypted chat" />
+    <link rel="canonical" href="https://channelchat.onrender.com/" />
+
+    <!-- Open Graph Tags -->
+    <meta property="og:title" content="Channel - Encrypted Chat App" />
+    <meta property="og:description" content="Connect instantly with Channel, a secure real-time chatroom-based messaging app." />
+    <meta property="og:image" content="https://channelchat.onrender.com/static/images/preview.png" />
+    <meta property="og:url" content="https://channelchat.onrender.com/" />
+    <meta property="og:type" content="website" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Channel - Encrypted Chat App" />
+    <meta name="twitter:description" content="A real-time chatroom app for seamless communication." />
+    <meta name="twitter:image" content="https://channelchat.onrender.com/static/images/preview.png" />
+
+    <!-- Styles -->
+    <link defer rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+
+    <script>
+       document.addEventListener("DOMContentLoaded", () => {
+           const html = document.documentElement;
+           const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+       
+           if (localStorage.getItem("darkMode") === "dark" || (!localStorage.getItem("darkMode") && prefersDark)) {
+               html.classList.add("dark");
+           } else {
+               html.classList.remove("dark");
+           }
+       });
+    </script>
+
+    <!-- Service Worker Registration -->
+    <script>
+       if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.register('/service-worker.js', { scope: '/' })
+              .then(registration => {
+                  console.log('ServiceWorker registered with scope:', registration.scope);
+                  return navigator.serviceWorker.ready;
+              })
+              .then(registration => {
+                  if (registration.active) {
+                      console.log('ServiceWorker ready state:', registration.active.state);
+                  }
+              })
+              .catch(err => {
+                  console.error('ServiceWorker registration failed:', err);
+              });
+      }
+
+      console.log('ServiceWorker supported:', 'serviceWorker' in navigator);
+
+      // Handle offline/online status
+      window.addEventListener('online', () => {
+          document.getElementById('offline-notification').classList.add('hidden');
+      });
+
+      window.addEventListener('offline', () => {
+          document.getElementById('offline-notification').classList.remove('hidden');
+      });
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'deep-navy': '#0A1E3C',
+                        'electric-blue': '#1E90FF',
+                        'soft-blue': '#4D7CFE',
+                        'dark-slate': '#1F2937',
+                        'accent-cyan': '#00FFD4'
+                    },
+                    backgroundImage: {
+                        'gradient-primary': 'linear-gradient(135deg, #1E90FF 0%, #4D7CFE 100%)',
+                        'gradient-secondary': 'linear-gradient(135deg, #00FFD4 0%, #4D7CFE 100%)'
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes float { 
+            0%, 100% { transform: translateY(0px); } 
+            50% { transform: translateY(-15px); } 
+        }
+        .floating-element { 
+            animation: float 4s ease-in-out infinite; 
+        }
+        .glow-effect { 
+            transition: all 0.3s ease;
+        }
+        .glow-effect:hover {
+            box-shadow: 0 0 15px rgba(77, 124, 254, 0.5);
+            transform: scale(1.05);
+        }
+        @keyframes floatVariant {
+            0%, 100% { 
+                transform: translateY(0) rotate(0deg); 
+                opacity: 0.3;
+            }
+            50% { 
+                transform: translateY(-50px) rotate(20deg); 
+                opacity: 0.5;
+            }
+        }
+        .message-bubble {
+            position: fixed;
+            background: linear-gradient(135deg, rgba(30, 64, 175, 0.4), rgba(79, 70, 229, 0.3));
+            border-radius: 50%;
+            opacity: 0.3;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.4);
+            transition: all 0.6s ease-out;
+            will-change: transform, opacity;
+            cursor: pointer;
+            backdrop-filter: blur(10px);
+        }
+        .message-bubble:hover {
+            opacity: 0.6;
+            transform: scale(1.2) rotate(10deg);
+            box-shadow: 0 15px 30px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body 
+    x-data="{ 
+        darkMode: localStorage.getItem('darkMode') === 'true', 
+        mobileMenuOpen: false,
+        toggleDarkMode() {
+            this.darkMode = !this.darkMode;
+            localStorage.setItem('darkMode', this.darkMode);
+            document.documentElement.classList.toggle('dark');
+        }
+    }" 
+    :class="{ 'dark': darkMode }"
+    class="bg-white dark:bg-deep-navy text-gray-900 dark:text-white font-sans antialiased overflow-x-hidden">
+
+    <!-- Floating Message Bubbles -->
+    <div id="floating-bubbles" class="fixed inset-0 pointer-events-none z-0" aria-hidden="true"></div>
+
+    <!-- Mobile Menu -->
     <div 
-        class="bg-white dark:bg-dark-slate w-4/5 h-full p-6 shadow-2xl transform transition-all duration-300 ease-in-out"
-        @click.stop>
-        <div class="flex justify-between items-center mb-8">
-            <span class="text-2xl font-bold dark:text-white">Channel</span>
-            <button @click="mobileMenuOpen = false" class="text-gray-600 dark:text-white hover:text-red-500 transition">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
+        x-show="mobileMenuOpen" 
+        x-transition 
+        class="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm md:hidden"
+        @click="mobileMenuOpen = false">
+        <div 
+            class="bg-white dark:bg-dark-slate w-3/4 h-full p-6 shadow-2xl"
+            @click.stop>
+            <div class="flex justify-between items-center mb-8">
+                <span class="text-2xl font-bold dark:text-white">Channel Chat</span>
+                <button @click="mobileMenuOpen = false" class="text-gray-600 dark:text-white">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
+            <nav class="space-y-4">
+                <a href="#features" class="block py-2 hover:text-electric-blue" @click="mobileMenuOpen = false">Features</a>
+                <a href="#security" class="block py-2 hover:text-electric-blue" @click="mobileMenuOpen = false">Security</a>
+                <a href="#testimonials" class="block py-2 hover:text-electric-blue" @click="mobileMenuOpen = false">Testimonials</a>
+                <button 
+                    @click="toggleDarkMode(); mobileMenuOpen = false"
+                    class="w-full text-left py-2 hover:text-electric-blue">
+                    Toggle Dark Mode
+                </button>
+            </nav>
         </div>
-        <nav class="space-y-4">
-            <a href="/login" class="block text-gray-600 dark:text-white hover:text-electric-blue transition font-medium p-2 rounded-md">
-                Login
-            </a>
-        </nav>
     </div>
-</div>
 
-<div class="min-h-screen flex flex-col relative bg-gradient-to-br from-white to-blue-50 dark:from-deep-navy">
     <!-- Navigation -->
-    <nav class="sticky top-0 z-40 bg-white/90 dark:bg-deep-navy/90 backdrop-blur-md shadow-sm">
+    <nav class="sticky top-0 z-40 bg-white/80 dark:bg-deep-navy/80 backdrop-blur-md shadow-sm">
         <div class="container mx-auto px-6 py-4 flex justify-between items-center">
             <div class="flex items-center space-x-4">
-                <div class="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center shadow-lg">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
-                    </svg>
+                <div class="w-12 h-12 bg-gradient-primary rounded-full flex items-center justify-center glow-effect">
+                    <i class="fas fa-comment-dots text-white text-2xl"></i>
                 </div>
-                <span class="text-2xl font-bold dark:text-white">Channel</span>
+                <span class="text-2xl font-bold dark:text-white">Channel Chat</span>
             </div>
             <div class="hidden md:flex space-x-6 items-center">
                 <button 
                     @click="toggleDarkMode()"
-                    class="text-gray-600 dark:text-gray-300 hover:text-electric-blue transition p-2 rounded-full">
+                    class="text-gray-600 dark:text-gray-300 hover:text-electric-blue transition glow-effect p-2 rounded-full">
                     <svg x-show="!darkMode" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
                     </svg>
                     <svg x-show="darkMode" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                        <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd" />
+                        <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
                     </svg>
                 </button>
-                <a href="/login" class="bg-gradient-primary text-white px-4 py-2 rounded-full hover:opacity-90 transition shadow-lg">
+                <a href="/login" class="bg-gradient-primary text-white px-4 py-2 rounded-full hover:opacity-90 transition glow-effect">
                     Login
                 </a>
             </div>
@@ -66,7 +230,7 @@
     <!-- Hero Section -->
     <header class="relative z-10 container mx-auto px-6 py-16 md:py-24 grid md:grid-cols-2 items-center gap-12">
         <div class="space-y-6">
-            <div class="bg-gradient-primary inline-block px-4 py-2 rounded-full text-white text-sm font-medium mb-4 shadow-md">
+            <div class="bg-gradient-primary inline-block px-4 py-2 rounded-full text-white text-sm font-medium mb-4">
                 Secure Communication Reimagined
             </div>
             <h1 class="text-5xl md:text-6xl font-bold mb-6 text-dark-slate dark:text-white leading-tight">
@@ -75,31 +239,177 @@
             <p class="text-xl text-gray-600 dark:text-gray-300 mb-10 max-w-xl">
                 Combining military-level encryption with an intuitive interface. Protect your conversations across all devices with cutting-edge security.
             </p>
+            
+            <!-- Social Proof Section -->
+            <div class="bg-gray-100 dark:bg-dark-slate rounded-xl p-4 mb-6">
+                <div class="flex justify-between">
+                    <div>
+                        <span class="text-3xl font-bold text-electric-blue">500K+</span>
+                        <p class="text-sm text-gray-600 dark:text-gray-300">Active Users</p>
+                    </div>
+                    <div className="border-l border-gray-300 dark:border-gray-700 pl-4">
+                        <span class="text-3xl font-bold text-electric-blue">4.8/5</span>
+                        <p class="text-sm text-gray-600 dark:text-gray-300">User Rating</p>
+                    </div>
+                </div>
+            </div>
+
             <div class="flex space-x-4">
-                <a href="/register" class="bg-gradient-primary text-white font-bold py-4 px-8 rounded-lg hover:opacity-90 transition shadow-lg">
-                    Get Started
+                <a href="/register" class="bg-gradient-primary text-white font-bold py-4 px-8 rounded-lg hover:opacity-90 transition flex items-center space-x-2 glow-effect">
+                    <span>Get Started</span>
+                    <i class="fas fa-arrow-right"></i>
                 </a>
-                <a href="#" class="bg-gray-100 dark:bg-dark-slate text-dark-slate dark:text-white font-bold py-4 px-8 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition shadow-md">
+                <a href="#" class="bg-gray-100 dark:bg-dark-slate text-dark-slate dark:text-white font-bold py-4 px-8 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition glow-effect">
                     Download App
                 </a>
             </div>
         </div>
+        <div class="hidden md:block relative">
+            <div class="bg-gradient-to-br from-electric-blue to-soft-blue rounded-3xl p-6 shadow-2xl floating-element">
+                <div class="bg-dark-slate/50 rounded-2xl p-4">
+                    <div class="flex items-center mb-4">
+                        <img src="/static/images/default-profile.png" alt="Profile" class="w-10 h-10 rounded-full mr-3">
+                        <div>
+                            <p class="font-semibold text-white">Alice Johnson</p>
+                            <p class="text-xs text-gray-400">Online</p>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <div class="bg-message-blue text-white rounded-2xl px-4 py-2 self-start max-w-xs message-bubble">
+                            Hey, how's the project coming along?
+                        </div>
+                        <div class="bg-message-gray text-white rounded-2xl px-4 py-2 self-end max-w-xs ml-auto message-bubble">
+                            Almost done! I'll send the final draft soon.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </header>
-</div>
 
-<script type="module">
-import { waitForAuthReady } from '/static/js/auth.js';
+    <!-- Features Section -->
+    <section class="bg-gray-50 dark:bg-dark-slate py-16 md:py-20 px-4 md:px-6">
+        <div class="container mx-auto max-w-6xl">
+            <h2 class="text-4xl font-bold text-center mb-12 text-dark-slate dark:text-white">
+                Why Choose <span class="text-electric-blue">Channel Chat</span>?
+            </h2>
+            <div class="grid md:grid-cols-3 gap-8">
+                <div class="bg-white dark:bg-deep-navy p-6 rounded-lg text-center hover:shadow-xl transition glow-effect">
+                    <i class="fas fa-clock text-6xl mb-4 text-electric-blue"></i>
+                    <h3 class="text-xl font-semibold mb-4 text-dark-slate dark:text-white">Real-Time Messaging</h3>
+                    <p class="text-gray-600 dark:text-gray-300">Instant communication with zero lag, keeping you connected always.</p>
+                </div>
+                <div class="bg-white dark:bg-deep-navy p-6 rounded-lg text-center hover:shadow-xl transition glow-effect">
+                    <i class="fas fa-lock text-6xl mb-4 text-emerald-500"></i>
+                    <h3 class="text-xl font-semibold mb-4 text-dark-slate dark:text-white">End-to-End Encryption</h3>
+                    <p class="text-gray-600 dark:text-gray-300">Your conversations remain private and secure, always.</p>
+                </div>
+                <div class="bg-white dark:bg-deep-navy p-6 rounded-lg text-center hover:shadow-xl transition glow-effect">
+                    <i class="fas fa-globe text-6xl mb-4 text-sky-500"></i>
+                    <h3 class="text-xl font-semibold mb-4 text-dark-slate dark:text-white">Global Connectivity</h3>
+                    <p class="text-gray-600 dark:text-gray-300">Connect with people across the globe, anytime, anywhere.</p>
+                </div>
+            </div>
+        </div>
+    </section>
 
-document.addEventListener('DOMContentLoaded', async () => {
-    try {
-        const isAuthenticated = await waitForAuthReady();
-        if (isAuthenticated) {
-            window.location.href = '/chat';
+
+    <!-- Call to Action -->
+    <section class="bg-gradient-to-r from-electric-blue to-soft-blue text-white py-16 md:py-20 px-4 md:px-6 text-center">
+        <div class="container mx-auto max-w-3xl">
+            <h2 class="text-4xl font-bold mb-6">Ready to Join the Conversation?</h2>
+            <p class="text-xl mb-8 opacity-90">Download Channel Chat and start connecting today!</p>
+            <div class="flex justify-center space-x-4">
+                <a href="#" class="bg-white text-electric-blue px-8 py-4 rounded-full font-semibold hover:bg-gray-100 transition transform hover:scale-105 will-change-transform">
+                    <i class="fas fa-download mr-2"></i>Download Now
+                </a>
+                <a href="#" class="border-2 border-white text-white px-8 py-4 rounded-full font-semibold hover:bg-white hover:text-electric-blue transition transform hover:scale-105 will-change-transform">
+                    <i class="fas fa-info-circle mr-2"></i>Learn More
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-deep-navy text-white py-12">
+        <div class="container mx-auto px-6">
+            <div class="mt-8 pt-8 border-t border-gray-800 flex justify-between items-center">
+                <div class="flex items-center space-x-4">
+                    <div class="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center">
+                        <i class="fas fa-comment-dots text-white text-2xl"></i>
+                    </div>
+                    <span className="font-bold">© 2025 Channel Chat. All rights reserved.</span>
+                </div>
+                <div class="flex space-x-4">
+                    <a href="https://github.com/MrBlankCoding/ChannelChat" class="text-gray-400 hover:text-electric-blue glow-effect p-2 rounded-full">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        </svg>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Floating Bubble Animation
+        function createFloatingBubble() {
+            const bubble = document.createElement('div');
+            bubble.classList.add('message-bubble');
+            
+            const size = Math.random() * 100 + 30;
+            bubble.style.width = `${size}px`;
+            bubble.style.height = `${size}px`;
+            
+            const edgePadding = 50;
+            bubble.style.top = `${Math.random() * (window.innerHeight - edgePadding)}px`;
+            bubble.style.left = `${Math.random() * (window.innerWidth - edgePadding)}px`;
+            
+            bubble.style.animationName = 'floatVariant';
+            bubble.style.animationDuration = `${Math.random() * 8 + 6}s`;
+            bubble.style.animationIterationCount = 'infinite';
+            bubble.style.animationTimingFunction = 'ease-in-out';
+
+            bubble.addEventListener('mouseenter', () => {
+                bubble.style.transform = 'scale(1.3) rotate(15deg)';
+                bubble.style.opacity = '0.8';
+            });
+            bubble.addEventListener('mouseleave', () => {
+                bubble.style.transform = 'scale(1) rotate(0deg)';
+                bubble.style.opacity = '0.3';
+            });
+
+            const bubblesContainer = document.getElementById('floating-bubbles');
+            bubblesContainer.appendChild(bubble);
+
+            setTimeout(() => {
+                bubble.remove();
+                createFloatingBubble();
+            }, 15000);
         }
-    } catch (error) {
-        console.error('Authentication check failed', error);
-    }
-});
-</script>
 
-{% endblock %}
+        function initBubbles() {
+            const maxBubbles = 15;
+            for (let i = 0; i < maxBubbles; i++) {
+                requestAnimationFrame(createFloatingBubble);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', initBubbles);
+    </script>
+    <script type="module">
+        import { waitForAuthReady } from '/static/js/auth.js';
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                const isAuthenticated = await waitForAuthReady();
+                if (isAuthenticated) {
+                    window.location.href = '/chat';
+                }
+            } catch (error) {
+                console.error('Authentication check failed', error);
+            }
+        });
+        </script>
+</body>
+</html>
